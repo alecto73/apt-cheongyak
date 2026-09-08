@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eeefea">
+<title>시군구 청약·미분양 조회</title>
+<style>
+:root{
+  --paper:#eeefea; --card:#f7f7f4; --ink:#191c18; --rule:#d3d5cc;
+  --muted:#6e7269; --blue:#2c4a7c; --ochre:#8a5a12; --warn:#8c3a2b;
+  --u0:#e6e7e0; --u1:#e2dcc4; --u2:#d8c79a; --u3:#c9a962; --u4:#a87a2a;
+  --pad:clamp(16px,3vw,32px);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",
+    "Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  font-size:15px; line-height:1.55;
+  -webkit-text-size-adjust:100%;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:var(--blue);text-decoration:none;border-bottom:1px solid rgba(44,74,124,.35)}
+a:hover{border-bottom-color:var(--blue)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+svg.map path:focus{outline:none}
+svg.map path:focus-visible{outline:none;stroke:var(--blue);stroke-width:3.5}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* ── 머리말 ─────────────────────────────── */
+header{
+  display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;
+  padding:18px var(--pad) 14px;border-bottom:1px solid var(--rule);
+}
+header h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.02em}
+header .src{margin-left:auto;font-size:12.5px;color:var(--muted);line-height:1.4}
+
+/* ── 레이아웃 ───────────────────────────── */
+.wrap{display:grid;grid-template-columns:minmax(340px,42%) 1fr;
+  gap:0;align-items:start}
+.left{padding:var(--pad);border-right:1px solid var(--rule);
+  position:sticky;top:0;max-height:100vh;overflow:auto}
+.right{padding:var(--pad);min-width:0}
+@media(max-width:860px){
+  .wrap{grid-template-columns:1fr}
+  .left{position:static;max-height:none;border-right:0;
+    border-bottom:1px solid var(--rule);padding-bottom:18px}
+}
+
+/* ── 지도 ───────────────────────────────── */
+.crumb{display:flex;align-items:center;gap:10px;margin-bottom:12px;
+  font-size:13.5px;color:var(--muted)}
+.crumb b{color:var(--ink);font-weight:600}
+.crumb button{border:1px solid var(--rule);border-radius:3px;
+  padding:3px 9px;font-size:12.5px;background:var(--card)}
+.crumb button:hover{border-color:var(--ink)}
+svg.map{width:100%;height:clamp(340px,64vh,720px);display:block;
+  touch-action:manipulation}
+svg.map path{stroke:var(--paper);stroke-width:1.6;cursor:pointer;
+  transition:fill .12s}
+svg.map path:hover{stroke:var(--ink);stroke-width:2}
+svg.map path.on{fill:var(--ink)!important;stroke:var(--ink)}
+svg.map text{font-size:15px;fill:var(--ink);text-anchor:middle;
+  pointer-events:none;paint-order:stroke;stroke:var(--paper);
+  stroke-width:3px;font-weight:520}
+svg.map text.dim{fill:var(--muted)}
+svg.map text.on{fill:var(--paper);stroke:none}
+svg.map rect.mk{fill:var(--blue);pointer-events:none}
+
+.legend{margin-top:14px;font-size:12.5px;color:var(--muted)}
+.legend .bar{display:flex;margin:6px 0 4px}
+.legend .bar i{flex:1;height:9px}
+.legend .ends{display:flex;justify-content:space-between}
+.legend .mk{display:inline-block;width:7px;height:7px;
+  background:var(--blue);vertical-align:1px;margin-right:5px}
+.offmap{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
+.offmap button{border:1px solid var(--rule);border-radius:3px;
+  padding:3px 9px;font-size:12.5px;background:var(--card)}
+
+/* ── 결과 ───────────────────────────────── */
+.empty{color:var(--muted);max-width:34em;padding-top:6px}
+h2.place{margin:0 0 2px;font-size:clamp(26px,4vw,38px);
+  font-weight:680;letter-spacing:-.035em;line-height:1.1}
+.place-sub{color:var(--muted);font-size:13.5px;margin-bottom:22px}
+
+.figs{display:grid;grid-template-columns:repeat(3,1fr);
+  border-top:2px solid var(--ink);border-bottom:1px solid var(--rule)}
+.fig{padding:12px 14px 13px;border-right:1px solid var(--rule)}
+.fig:nth-child(3n),.fig:last-child{border-right:0}
+.fig:nth-child(n+4){border-top:1px solid var(--rule)}
+@media(max-width:520px){
+  .figs{grid-template-columns:repeat(2,1fr)}
+  .fig:nth-child(3n){border-right:1px solid var(--rule)}
+  .fig:nth-child(2n){border-right:0}
+  .fig:nth-child(n+3){border-top:1px solid var(--rule)}
+}
+.fig .k{font-size:12.5px;color:var(--muted);margin-bottom:3px}
+.fig .v{font-size:26px;font-weight:650;letter-spacing:-.03em;line-height:1.15}
+.fig .u{font-size:13px;font-weight:450;color:var(--muted);margin-left:2px}
+.fig.ochre .v{color:var(--ochre)}
+.fig .note{font-size:12px;color:var(--muted);margin-top:2px}
+
+h3{font-size:14px;font-weight:640;margin:30px 0 0;
+  padding-bottom:7px;border-bottom:1px solid var(--rule);
+  display:flex;align-items:baseline;gap:8px}
+h3 span{font-weight:400;color:var(--muted);font-size:12.5px}
+
+/* 공고 */
+.yr{margin-top:8px}
+.yr>summary{cursor:pointer;list-style:none;padding:9px 0;
+  border-bottom:1px solid var(--rule);display:flex;gap:10px;
+  align-items:baseline;font-size:13.5px}
+.yr>summary::-webkit-details-marker{display:none}
+.yr>summary::before{content:"+";width:14px;color:var(--muted);
+  font-weight:600}
+.yr[open]>summary::before{content:"–"}
+.yr>summary b{font-size:15px;font-weight:620}
+.yr>summary i{margin-left:auto;color:var(--muted);font-style:normal;
+  font-size:12.5px}
+
+.nt{padding:15px 0 17px;border-bottom:1px solid var(--rule)}
+.nt-hd{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.nt-hd .nm{font-size:16.5px;font-weight:620;letter-spacing:-.02em}
+.nt-hd .dt{color:var(--muted);font-size:12.5px}
+.nt-meta{color:var(--muted);font-size:12.5px;margin-top:3px}
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.tag{font-size:11.5px;padding:1px 7px;border-radius:2px;
+  border:1px solid var(--rule);color:var(--muted)}
+.tag.hot{border-color:rgba(140,58,43,.5);color:var(--warn)}
+.tag.cap{border-color:rgba(44,74,124,.45);color:var(--blue)}
+
+table{width:100%;border-collapse:collapse;margin-top:11px;font-size:13px}
+th,td{padding:5px 8px;text-align:right;white-space:nowrap}
+th{font-weight:550;color:var(--muted);font-size:12px;
+  border-bottom:1px solid var(--rule)}
+th:first-child,td:first-child{text-align:left}
+tbody tr+tr td{border-top:1px solid rgba(211,213,204,.6)}
+td.r-close{color:var(--blue);font-weight:600}
+td.r-short{color:var(--warn)}
+td.r-none{color:var(--muted)}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+tr.pick{cursor:pointer}
+tr.pick:hover td{background:var(--card)}
+tr.pick td b{font-weight:600}
+.lk{margin-top:9px;font-size:13px}
+.foot{margin:34px 0 40px;font-size:12px;color:var(--muted);
+  border-top:1px solid var(--rule);padding-top:12px;max-width:60em}
+.spin{color:var(--muted);font-size:13.5px;padding:8px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>시군구 청약·미분양 조회</h1>
+  <div class="src" id="src"></div>
+</header>
+
+<div class="wrap">
+  <div class="left">
+    <div class="crumb" id="crumb"></div>
+    <div id="mapbox"></div>
+    <div class="legend" id="legend"></div>
+    <div class="offmap" id="offmap"></div>
+  </div>
+  <div class="right" id="panel">
+    <p class="empty">지도에서 시·도를 고르면 시·군·구가 펼쳐집니다.
+      시·군·구를 고르면 최근 3년 아파트 청약 결과와 조회 시점의 미분양
+      현황을 함께 보여줍니다.</p>
+  </div>
+</div>
+
+<script>
+const E = window.__EMBEDDED__ || null;
+const $ = (id) => document.getElementById(id);
+const cache = {map:{}, region:{}};
+let IDX = null, NAT = null, view = {sido:null, sgg:null};
+
+async function grab(kind, key) {
+  if (E) return kind === 'map'
+    ? (key ? E.map[key] : E.mapNational)
+    : (kind === 'index' ? E.index : E.region[key]);
+  // 파일명은 영문 슬러그를 쓴다. 한글 파일명은 정적 호스팅에서
+  // 인코딩이 어긋나 404가 나는 경우가 있다.
+  const s = SLUG[key] || key;
+  const url = kind === 'index' ? 'index.json'
+    : kind === 'map' ? (key ? `map/${s}.json` : 'map-national.json')
+    : `region/${s}.json`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url} 를 불러오지 못했습니다 (${r.status})`);
+  return r.json();
+}
+
+const fmt = (n) => n == null ? '–' : n.toLocaleString('ko-KR');
+
+/* 미분양 세대수를 5단계로 나눈다. 상위 지역이 워낙 커서
+   등간격으로 자르면 대부분이 최하 단계로 뭉친다. 실제 분포를
+   보고 자를 수 있게 분위수를 쓴다. */
+function makeScale(values) {
+  const v = values.filter((x) => x > 0).sort((a, b) => a - b);
+  if (!v.length) return {cut: [], color: () => 'var(--u0)', max: 0};
+  const q = (p) => v[Math.min(v.length - 1, Math.floor(v.length * p))];
+  const cut = [q(0.25), q(0.5), q(0.75), q(0.92)];
+  const cols = ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
+  return {
+    cut, max: v[v.length - 1],
+    color(n) {
+      if (!n) return 'var(--u0)';
+      for (let i = 0; i < cut.length; i++) if (n <= cut[i]) return cols[i];
+      return cols[3];
+    }
+  };
+}
+
+/* 전국 지도에서 수도권과 충청권 라벨이 서로 겹친다. 지역이 작아
+   라벨을 안에 넣을 수 없으니 방향만 살짝 밀어준다. */
+const NUDGE = {서울:[-6,-14], 인천:[-30,6], 경기:[30,26], 세종:[-26,0],
+  대전:[8,14], 대구:[12,-2], 울산:[16,6], 부산:[12,12], 광주:[-10,0]};
+
+function drawMap(m, level, scale, stats, onPick) {
+  const names = Object.keys(m.paths);
+  const svg = [`<svg class="map" viewBox="${m.viewBox}" role="group"
+      aria-label="${level === 'nat' ? '전국 시도' : '시군구'} 지도">`];
+  for (const n of names) {
+    const s = stats[n] || {};
+    svg.push(`<path d="${m.paths[n]}" data-n="${n}"
+      fill="${scale.color(s.unsold)}" role="button" tabindex="0"
+      aria-label="${n} 미분양 ${fmt(s.unsold)}호"></path>`);
+  }
+  for (const n of names) {
+    let p = m.labels[n]; if (!p) continue;
+    if (level === 'nat' && NUDGE[n])
+      p = [p[0] + NUDGE[n][0], p[1] + NUDGE[n][1]];
+    const s = stats[n] || {};
+    const small = level !== 'nat' && names.length > 20;
+    const cls = s.unsold || s.n ? '' : ' class="dim"';
+    if (s.n) svg.push(`<rect class="mk" x="${p[0] - (small ? 24 : 30)}"
+      y="${p[1] - (small ? 9 : 11)}" width="${small ? 7 : 8}"
+      height="${small ? 7 : 8}"></rect>`);
+    svg.push(`<text${cls} x="${p[0] + (s.n ? 5 : 0)}" y="${p[1]}"
+      style="font-size:${small ? 13 : 16}px" data-t="${n}">${n}</text>`);
+  }
+  svg.push('</svg>');
+  $('mapbox').innerHTML = svg.join('');
+  $('mapbox').querySelectorAll('path').forEach((el) => {
+    const go = () => onPick(el.dataset.n);
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+  drawLegend(scale);
+}
+
+function drawLegend(scale) {
+  if (!scale.cut.length) { $('legend').innerHTML = ''; return; }
+  const c = ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
+  $('legend').innerHTML =
+    `<div>색: 미분양 세대수 (호)</div>
+     <div class="bar">${c.map((x) => `<i style="background:${x}"></i>`).join('')}</div>
+     <div class="ends num"><span>1</span><span>${fmt(scale.max)}</span></div>
+     <div style="margin-top:9px"><span class="mk"></span>최근 3년 청약 공고 있음</div>`;
+}
+
+function mark(name) {
+  const el = $('mapbox').querySelector(`path[data-n="${name}"]`);
+  $('mapbox').querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
+  if (el) el.classList.add('on');
+  const t = $('mapbox').querySelector(`text[data-t="${name}"]`);
+  if (t) t.classList.add('on');
+}
+
+/* ── 화면 전환 ──────────────────────────── */
+async function showNational() {
+  view = {sido: null, sgg: null};
+  NAT = NAT || await grab('map');
+  const stats = {};
+  for (const [s, v] of Object.entries(IDX.sidoSummary))
+    stats[s] = {unsold: v.total, n: v.notices};
+  const scale = makeScale(Object.values(stats).map((x) => x.unsold));
+  $('crumb').innerHTML = '<b>전국</b><span>시·도를 선택하세요</span>';
+  $('offmap').innerHTML = '';
+  drawMap(NAT, 'nat', scale, stats, showSido);
+  renderOverview();
+}
+
+function renderOverview() {
+  const M = IDX.meta;
+  const rows = Object.entries(IDX.sidoSummary)
+    .sort((a, b) => b[1].total - a[1].total);
+  const sum = (f) => rows.reduce((a, [, v]) => a + (v[f] || 0), 0);
+  const figs = [
+    ['미분양', fmt(sum('total')), '호', 'ochre', `${ym(M.unsoldBaseYm)} 기준`],
+    ['준공 후 미분양', fmt(sum('after')), '호', 'ochre',
+      `전체의 ${Math.round(sum('after') / sum('total') * 100)}%`],
+    ['청약 공고', fmt(sum('notices')), '건', '',
+      `${M.noticeFrom} ~ ${M.noticeTo}`],
+    ['공급 세대', fmt(sum('supply')), '세대', '', ''],
+    ['미분양 상위', rows[0][0], '', 'ochre', `${fmt(rows[0][1].total)}호`],
+  ];
+  $('panel').innerHTML =
+    `<h2 class="place">전국</h2>
+     <div class="place-sub">아파트 분양 공고와 미분양 현황</div>
+     <div class="figs">` +
+    figs.map(([k, v, u, c, note]) => `<div class="fig ${c}">
+      <div class="k">${k}</div>
+      <div class="v num">${v}<span class="u">${u}</span></div>
+      ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') +
+    `</div>
+     <h3>시·도별 <span>미분양 많은 순</span></h3>
+     <div class="tw"><table><thead><tr>
+       <th>시·도</th><th>미분양</th><th>준공 후</th><th>비중</th>
+       <th>공고</th><th>공급 세대</th><th>평균 분양가</th></tr></thead>
+     <tbody>` + rows.map(([s, v]) => `<tr class="pick" data-s="${s}">
+       <td><b>${sidoFull(s)}</b></td>
+       <td class="num">${fmt(v.total)}</td>
+       <td class="num">${fmt(v.after)}</td>
+       <td class="num">${v.total ? Math.round(v.after / v.total * 100) + '%' : '–'}</td>
+       <td class="num">${fmt(v.notices)}</td>
+       <td class="num">${fmt(v.supply)}</td>
+       <td class="num">${v.avgPyeong ? fmt(v.avgPyeong) : '–'}</td></tr>`).join('') +
+    `</tbody></table></div>
+     <p class="foot">색이 진한 지역일수록 미분양이 많습니다. 표의 시·도를
+     누르면 시·군·구 지도로 넘어갑니다. 분양가 단위는 만원/평입니다.</p>`;
+  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
+    tr.onclick = () => showSido(tr.dataset.s));
+}
+
+async function showSido(sido) {
+  view = {sido, sgg: null};
+  $('mapbox').innerHTML = '<p class="spin">경계를 불러오는 중…</p>';
+  const m = cache.map[sido] || (cache.map[sido] = await grab('map', sido));
+  const names = Object.keys(m.paths).concat(m.offmap || []);
+  // 세종처럼 하위 시군구가 하나뿐인 시도는 두 번 누를 이유가 없다.
+  if (names.length === 1) { await showSggOn(sido, m, names[0]); return; }
+  const stats = {};
+  for (const [k, v] of Object.entries(IDX.summary)) {
+    const [s, g] = k.split('|');
+    if (s === sido) stats[g] = v;
+  }
+  const scale = makeScale(Object.values(stats).map((x) => x.unsold));
+  $('crumb').innerHTML =
+    `<button id="back">전국</button><b>${m.name}</b>
+     <span>시·군·구를 선택하세요</span>`;
+  $('back').onclick = showNational;
+  drawMap(m, 'sgg', scale, stats, (g) => showSgg(sido, g));
+  if (view.sgg) mark(view.sgg);
+  $('offmap').innerHTML = (m.offmap || []).map((g) =>
+    `<button data-g="${g}">${g}</button>`).join('');
+  $('offmap').querySelectorAll('button').forEach((b) =>
+    b.onclick = () => showSgg(sido, b.dataset.g));
+  $('panel').innerHTML =
+    `<p class="empty">${m.name}의 시·군·구를 고르세요.</p>`;
+}
+
+async function showSgg(sido, sgg) {
+  view = {sido, sgg};
+  mark(sgg);
+  await loadPanel(sido, sgg);
+}
+
+/* 단일 시군구 시도: 지도는 그 지역만 그리고 상세를 바로 띄운다. */
+async function showSggOn(sido, m, sgg) {
+  view = {sido, sgg};
+  const scale = makeScale([]);
+  $('crumb').innerHTML =
+    `<button id="back">전국</button><b>${m.name}</b>`;
+  $('back').onclick = showNational;
+  drawMap(m, 'sgg', scale, {}, () => {});
+  mark(sgg);
+  $('offmap').innerHTML = '';
+  await loadPanel(sido, sgg);
+}
+
+async function loadPanel(sido, sgg) {
+  $('panel').innerHTML = '<p class="spin">불러오는 중…</p>';
+  try {
+    const data = cache.region[sido] ||
+      (cache.region[sido] = await grab('region', sido));
+    renderPanel(sido, sgg, data[sgg] || {notices: [], unsold: {}});
+  } catch (e) {
+    $('panel').innerHTML = `<p class="empty">${sgg} 자료를 불러오지
+      못했습니다. ${e.message}</p>`;
+    return;
+  }
+  if (window.matchMedia('(max-width:860px)').matches)
+    $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+/* ── 결과 패널 ──────────────────────────── */
+function renderPanel(sido, sgg, R) {
+  const M = IDX.meta;
+  const ns = R.notices || [];
+  const total = R.unsold?.total, after = R.unsold?.after;
+  const share = total && after != null
+    ? Math.round(after / total * 100) : null;
+  const supply = ns.reduce((a, x) => a + x.supply, 0);
+  const pyeong = IDX.summary[`${sido}|${sgg}`]?.pyeong;
+  const rated = ns.reduce((a, x) => a + x.ratedTypes, 0);
+  const closed = ns.reduce((a, x) => a + x.closedTypes, 0);
+
+  const figs = [
+    ['미분양', fmt(total), '호', 'ochre', `${ym(M.unsoldBaseYm)} 기준`],
+    ['준공 후 미분양', fmt(after), '호', 'ochre',
+      share == null ? '' : `전체의 ${share}%`],
+    ['청약 공고', fmt(ns.length), '건', '', `${M.noticeFrom.slice(0, 4)}년 이후`],
+    ['공급 세대', fmt(supply), '세대', '', ''],
+    ['평균 분양가', pyeong ? fmt(pyeong) : '–', '만원/평', '',
+      pyeong ? '공급면적·세대수 가중' : ''],
+    ['타입 마감률', rated ? Math.round(closed / rated * 100) : '–',
+      rated ? '%' : '', '', rated ? `${rated}개 타입 중 ${closed}개` : ''],
+  ];
+
+  let h = `<h2 class="place">${sgg}</h2>
+    <div class="place-sub">${sidoFull(sido)}</div>
+    <div class="figs">` +
+    figs.map(([k, v, u, c, note]) => `<div class="fig ${c}">
+      <div class="k">${k}</div>
+      <div class="v num">${v}${u ? `<span class="u">${u}</span>` : ''}</div>
+      ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') +
+    `</div>`;
+
+  if (!ns.length) {
+    h += `<h3>청약 공고</h3>
+      <p class="empty" style="margin-top:14px">
+      ${M.noticeFrom} 이후 이 지역의 아파트 분양 공고가 없습니다.</p>`;
+  } else {
+    const byYear = {};
+    for (const n of ns) (byYear[n.noticeDate.slice(0, 4)] ||= []).push(n);
+    const years = Object.keys(byYear).sort().reverse();
+    h += `<h3>청약 공고 <span>최근 순</span></h3>`;
+    h += years.map((y, i) => {
+      const g = byYear[y];
+      const sup = g.reduce((a, x) => a + x.supply, 0);
+      return `<details class="yr"${i === 0 ? ' open' : ''}>
+        <summary><b>${y}년</b><span class="num">${g.length}건</span>
+          <i class="num">공급 ${fmt(sup)}세대</i></summary>
+        ${g.map(notice).join('')}</details>`;
+    }).join('');
+  }
+
+  h += `<div class="foot">
+    청약 자료는 한국부동산원 청약홈(공공데이터포털) 아파트 분양정보와
+    청약접수 경쟁률입니다. 분양가는 주택형별 공급금액(해당 타입 최고분양가,
+    만원)이며 평당가는 공급면적 기준으로 환산했습니다.
+    미분양은 국토교통부 미분양주택현황보고(KOSIS) ${ym(M.unsoldBaseYm)} 기준으로,
+    월 1회 공표되어 조회 시점과 1~2개월 차이가 납니다.
+    대상은 아파트 분양 공고이며 무순위·잔여세대·임의공급 등 별도 유형은
+    제외했습니다. 접수 직후이거나 경쟁률이 공표되지 않은 공고는
+    결과를 비워 두었고, 은행 전산 사정으로 접수건수는 청약홈 최종
+    수치와 다를 수 있습니다.
+    자료 생성 ${M.generated}.</div>`;
+
+  $('panel').innerHTML = h;
+}
+
+function notice(n) {
+  const tags = [];
+  if (n.kind) tags.push(`<span class="tag">${n.kind}</span>`);
+  if (n.rent && n.rent !== '분양주택')
+    tags.push(`<span class="tag">${n.rent}</span>`);
+  if (n.speculative) tags.push(`<span class="tag hot">투기과열지구</span>`);
+  if (n.priceCap) tags.push(`<span class="tag cap">분양가상한제</span>`);
+
+  const rows = n.types.map((t) => {
+    const cls = t.result === '마감' ? 'r-close'
+      : t.result === '미달' ? 'r-short' : 'r-none';
+    const res = t.result === '마감'
+      ? `${t.closedAt} 마감 <span class="num">${t.rate}:1</span>`
+      : t.result === '미달' ? '미달' : '결과 미공개';
+    return `<tr>
+      <td>${t.ty}</td>
+      <td class="num">${t.area ?? '–'}</td>
+      <td class="num">${fmt(t.gnrl)}</td>
+      <td class="num">${fmt(t.spsply)}</td>
+      <td class="num">${t.amount ? fmt(t.amount) : '–'}</td>
+      <td class="num">${t.pyeong ? fmt(t.pyeong) : '–'}</td>
+      <td class="num">${t.result === '결과없음' ? '–' : fmt(t.req)}</td>
+      <td class="${cls}">${res}</td></tr>`;
+  }).join('');
+
+  const meta = [n.builder, n.totalHshld ? `${fmt(n.totalHshld)}세대` : null,
+    n.moveIn ? `${n.moveIn.slice(0, 4)}년 ${+n.moveIn.slice(4)}월 입주 예정` : null,
+    n.avgPyeong ? `평균 ${fmt(n.avgPyeong)}만원/평` : null]
+    .filter(Boolean).join(' · ');
+
+  return `<div class="nt">
+    <div class="nt-hd"><span class="nm">${n.name}</span>
+      <span class="dt num">공고 ${n.noticeDate}</span></div>
+    <div class="nt-meta">${meta}</div>
+    <div class="nt-meta">${n.addr || ''}</div>
+    <div class="tags">${tags.join('')}</div>
+    <div class="tw"><table>
+      <thead><tr><th>주택형</th><th>공급면적</th><th>일반</th><th>특별</th>
+        <th>분양가</th><th>평당가</th><th>접수</th><th>청약 결과</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="lk">
+      ${n.url ? `<a href="${n.url}" target="_blank" rel="noopener">청약홈 공고 상세</a>` : ''}
+      ${n.homepage ? ` · <a href="${n.homepage}" target="_blank" rel="noopener">분양 홈페이지</a>` : ''}
+    </div></div>`;
+}
+
+const SLUG = {서울:'seoul',부산:'busan',대구:'daegu',인천:'incheon',
+  대전:'daejeon',울산:'ulsan',세종:'sejong',경기:'gyeonggi',강원:'gangwon',
+  충북:'chungbuk',충남:'chungnam',전북:'jeonbuk',전남광주:'jngj',
+  경북:'gyeongbuk',경남:'gyeongnam',제주:'jeju'};
+const SIDO_FULL = {서울:'서울특별시',부산:'부산광역시',대구:'대구광역시',
+  인천:'인천광역시',대전:'대전광역시',울산:'울산광역시',세종:'세종특별자치시',
+  경기:'경기도',강원:'강원특별자치도',충북:'충청북도',충남:'충청남도',
+  전북:'전북특별자치도',전남광주:'전남광주통합특별시',경북:'경상북도',
+  경남:'경상남도',제주:'제주특별자치도'};
+const sidoFull = (s) => SIDO_FULL[s] || s;
+const ym = (s) => s ? `${s.slice(0, 4)}년 ${+s.slice(4)}월` : '';
+
+(async function () {
+  try {
+    IDX = await grab('index');
+    $('src').innerHTML =
+      `청약 한국부동산원 청약홈 · 미분양 국토교통부 ${ym(IDX.meta.unsoldBaseYm)} 기준
+       <br>최근 3년 아파트 공고 ${fmt(IDX.meta.noticeCount)}건`;
+    await showNational();
+  } catch (e) {
+    $('panel').innerHTML = `<p class="empty">자료를 불러오지 못했습니다.
+      ${e.message}<br><br>파일을 직접 열면 브라우저가 데이터 요청을 막습니다.
+      같은 폴더에서 <code>python3 -m http.server 8000</code> 을 실행한 뒤
+      <code>http://localhost:8000</code> 으로 접속하거나,
+      standalone.html 을 여세요.</p>`;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+.env
+raw/
+web/data.json
+__pycache__/

@@ -1,0 +1,41 @@
+# 매일 새벽 자료를 갱신한다.
+# 인증키는 저장소 Settings > Secrets and variables > Actions 에
+# DATA_GO_KR_KEY, KOSIS_KEY 로 넣는다. .env 파일은 커밋하지 않는다.
+name: 자료 갱신
+
+on:
+  schedule:
+    - cron: "0 20 * * *"      # UTC 20:00 = 한국시간 05:00
+  workflow_dispatch:           # 필요할 때 수동 실행
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install shapely
+
+      - name: 청약·미분양 수집
+        env:
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+          KOSIS_KEY: ${{ secrets.KOSIS_KEY }}
+        run: |
+          python etl.py
+          python build_standalone.py
+
+      - name: 변경분 커밋
+        run: |
+          git config user.name  "github-actions"
+          git config user.email "actions@github.com"
+          git add web/index.json web/region web/standalone.html
+          git diff --staged --quiet && echo "변경 없음" && exit 0
+          git commit -m "자료 갱신 $(date -u +%Y-%m-%d)"
+          git push
