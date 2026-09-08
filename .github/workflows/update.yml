@@ -3,13 +3,13 @@
 # DATA_GO_KR_KEY, KOSIS_KEY 로 넣는다. .env 파일은 커밋하지 않는다.
 name: 자료 갱신
 
+name: 자료 갱신
+
 on:
   schedule:
-    - cron: "0 20 * * *"      # UTC 20:00 = 한국시간 05:00
-  workflow_dispatch:           # 필요할 때 수동 실행
-
-permissions:
-  contents: write
+    # 매일 UTC 20:00 (한국 시간 새벽 5시) 자동 실행
+    - cron: '0 20 * * *'
+  workflow_dispatch: # 지금처럼 수동으로 누를 수 있는 버튼도 그대로 유지
 
 jobs:
   update:
