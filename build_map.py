@@ -92,7 +92,12 @@ def transform(bbox, size, lat0):
     def fn(lon, lat):
         x, _ = project(lon, lat, lat0)
         return (x - sx0) * scale, H - (lat - miny) * scale
-    return fn, W, H
+
+    # 프론트엔드가 위경도를 같은 좌표계로 옮길 수 있게 계수를 넘긴다.
+    spec = {"cos": round(math.cos(math.radians(lat0)), 8),
+            "sx0": round(sx0, 6), "minLat": round(miny, 6),
+            "scale": round(scale, 6), "h": round(H, 3)}
+    return fn, W, H, spec
 
 
 def to_path(ring_list, fn):
@@ -142,7 +147,7 @@ def build(size=1000):
     nat_bbox = R.NATIONAL_BBOX
     nat_view = box(*nat_bbox)
     lat0 = (nat_bbox[1] + nat_bbox[3]) / 2
-    fn, W, H = transform(nat_bbox, size, lat0)
+    fn, W, H, _ = transform(nat_bbox, size, lat0)
     nat_paths, nat_labels = {}, {}
     for sido, g in sido_geom.items():
         clipped = g.intersection(nat_view)
@@ -161,8 +166,8 @@ def build(size=1000):
         tol = span * 0.0015
         minarea = (span ** 2) * 0.00025
         view = box(*bbox)
-        fn, W, H = transform(bbox, size, l0)
-        paths, labels, offmap = {}, {}, []
+        fn, W, H, proj = transform(bbox, size, l0)
+        paths, labels, offmap, boxes = {}, {}, [], {}
         for sgg, g in subs.items():
             visible = g.intersection(view)
             if visible.is_empty or visible.area < g.area * 0.02:
@@ -172,10 +177,16 @@ def build(size=1000):
             rl = rings(simp, minarea) or rings(simp, 0)
             paths[sgg] = to_path(rl, fn)
             labels[sgg] = label_point(visible, fn)
+            # 3단계 확대에 쓸 각 시군구의 화면 좌표 경계상자
+            x0, y0 = fn(visible.bounds[0], visible.bounds[3])
+            x1, y1 = fn(visible.bounds[2], visible.bounds[1])
+            boxes[sgg] = [round(x0, 1), round(y0, 1),
+                          round(x1 - x0, 1), round(y1 - y0, 1)]
         out["sido"][sido] = {"name": R.SIDO_FULL[sido],
                              "viewBox": f"0 0 {W:.0f} {H:.0f}",
                              "paths": paths, "labels": labels,
-                             "offmap": sorted(offmap)}
+                             "offmap": sorted(offmap), "boxes": boxes,
+                             "proj": proj}
         if offmap:
             print(f"  [지도밖] {sido}: {', '.join(sorted(offmap))}")
     return out

@@ -61,12 +61,23 @@ svg.map{width:100%;height:clamp(340px,64vh,720px);display:block;
 svg.map path{stroke:var(--paper);stroke-width:1.6;cursor:pointer;
   transition:fill .12s}
 svg.map path:hover{stroke:var(--ink);stroke-width:2}
-svg.map path.on{fill:var(--ink)!important;stroke:var(--ink)}
+svg.map path.on{stroke:var(--ink);stroke-width:2.6}
+svg.map path.off{opacity:.42}
+svg.map text.off{opacity:.4}
+svg.map g.mks circle.dot{stroke:var(--paper)}
+svg.map g.pin{cursor:pointer}
+svg.map g.pin:hover circle.dot,svg.map g.pin:focus-visible circle.dot{
+  stroke:var(--ink)}
+svg.map g.mks circle.dot.close{fill:var(--blue)}
+svg.map g.mks circle.dot.short{fill:var(--warn)}
+svg.map g.mks circle.dot.none{fill:var(--muted)}
+svg.map g.mks text{font-weight:650;stroke:none;fill:var(--paper);
+  paint-order:normal}
 svg.map text{font-size:15px;fill:var(--ink);text-anchor:middle;
   pointer-events:none;paint-order:stroke;stroke:var(--paper);
   stroke-width:3px;font-weight:520}
 svg.map text.dim{fill:var(--muted)}
-svg.map text.on{fill:var(--paper);stroke:none}
+svg.map text.on{font-weight:700}
 svg.map rect.mk{fill:var(--blue);pointer-events:none}
 
 .legend{margin-top:14px;font-size:12.5px;color:var(--muted)}
@@ -120,7 +131,14 @@ h3 span{font-weight:400;color:var(--muted);font-size:12.5px}
 .yr>summary i{margin-left:auto;color:var(--muted);font-style:normal;
   font-size:12.5px}
 
-.nt{padding:15px 0 17px;border-bottom:1px solid var(--rule)}
+.nt{padding:15px 0 17px;border-bottom:1px solid var(--rule);
+  scroll-margin-top:14px;transition:background .3s}
+.nt.flash{background:#e6e7df}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+  vertical-align:1px;margin-right:5px}
+.dot.close{background:var(--blue)}
+.dot.short{background:var(--warn)}
+.dot.none{background:var(--muted)}
 .nt-hd{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
 .nt-hd .nm{font-size:16.5px;font-weight:620;letter-spacing:-.02em}
 .nt-hd .dt{color:var(--muted);font-size:12.5px}
@@ -177,12 +195,16 @@ const cache = {map:{}, region:{}};
 let IDX = null, NAT = null, view = {sido:null, sgg:null};
 
 async function grab(kind, key) {
-  if (E) return kind === 'map'
-    ? (key ? E.map[key] : E.mapNational)
-    : (kind === 'index' ? E.index : E.region[key]);
   // 파일명은 영문 슬러그를 쓴다. 한글 파일명은 정적 호스팅에서
-  // 인코딩이 어긋나 404가 나는 경우가 있다.
+  // 인코딩이 어긋나 404가 나는 경우가 있다. 단일 파일 판본도
+  // 같은 키를 쓰므로 여기서 한 번만 변환한다.
   const s = SLUG[key] || key;
+  if (E) {
+    const hit = kind === 'map' ? (key ? E.map[s] : E.mapNational)
+      : (kind === 'index' ? E.index : E.region[s]);
+    if (!hit) throw new Error(`${key} 자료가 파일에 없습니다`);
+    return hit;
+  }
   const url = kind === 'index' ? 'index.json'
     : kind === 'map' ? (key ? `map/${s}.json` : 'map-national.json')
     : `region/${s}.json`;
@@ -225,6 +247,7 @@ function drawMap(m, level, scale, stats, onPick) {
     const s = stats[n] || {};
     svg.push(`<path d="${m.paths[n]}" data-n="${n}"
       fill="${scale.color(s.unsold)}" role="button" tabindex="0"
+      vector-effect="non-scaling-stroke"
       aria-label="${n} 미분양 ${fmt(s.unsold)}호"></path>`);
   }
   for (const n of names) {
@@ -238,7 +261,8 @@ function drawMap(m, level, scale, stats, onPick) {
       y="${p[1] - (small ? 9 : 11)}" width="${small ? 7 : 8}"
       height="${small ? 7 : 8}"></rect>`);
     svg.push(`<text${cls} x="${p[0] + (s.n ? 5 : 0)}" y="${p[1]}"
-      style="font-size:${small ? 13 : 16}px" data-t="${n}">${n}</text>`);
+      data-fs="${small ? 13 : 16}" style="font-size:${small ? 13 : 16}px"
+      data-t="${n}">${n}</text>`);
   }
   svg.push('</svg>');
   $('mapbox').innerHTML = svg.join('');
@@ -262,12 +286,135 @@ function drawLegend(scale) {
      <div style="margin-top:9px"><span class="mk"></span>최근 3년 청약 공고 있음</div>`;
 }
 
+/* 선택한 시군구로 뷰박스를 부드럽게 좁힌다. SVG 뷰박스는 CSS로
+   전환할 수 없어 프레임마다 직접 값을 옮긴다. */
+function setView(box, animate) {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg) return;
+  const cur = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
+  const to = box;
+  if (!animate) { svg.setAttribute('viewBox', to.join(' ')); return; }
+  const t0 = performance.now(), dur = 340;
+  (function step(t) {
+    const k = Math.min(1, (t - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    svg.setAttribute('viewBox',
+      cur.map((v, i) => (v + (to[i] - v) * e).toFixed(1)).join(' '));
+    if (k < 1) requestAnimationFrame(step);
+    else if (svg.querySelector('g.mks')) sizeMarkers();
+  })(performance.now());
+}
+
+function padBox(b, pad = 0.22) {
+  const [x, y, w, h] = b;
+  let side = Math.max(w, h) * (1 + pad);
+  // 제주시처럼 시도의 대부분을 차지하는 지역은 여백을 주면 오히려
+  // 축소된다. 시도 전체 화면보다 커지지 않게 막는다.
+  if (curFull) side = Math.min(side, Math.max(curFull[2], curFull[3]));
+  return [x + w / 2 - side / 2, y + h / 2 - side / 2, side, side];
+}
+
+/* 확대 배율이 바뀌면 마커와 지명 크기를 다시 맞춘다. 뷰박스 좌표계라
+   그냥 두면 확대할수록 점과 글자가 같이 커진다. */
+function sizeMarkers() {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg) return;
+  const vb = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
+  const k = vb[2] / (curFull ? curFull[2] : vb[2]);
+  svg.querySelectorAll('text[data-t]').forEach((t) => {
+    const base = +t.dataset.fs || 16;
+    t.setAttribute('style', `font-size:${(base * k).toFixed(1)}px`);
+  });
+  const g = svg.querySelector('g.mks');
+  if (!g) return;
+  const r = Math.max(2.5, vb[2] * 0.018);
+  g.querySelectorAll('circle.dot').forEach((c) => {
+    c.setAttribute('r', r);
+    c.setAttribute('stroke-width', r * 0.28);
+  });
+  // 손가락으로 누를 수 있게 보이지 않는 큰 판을 깔아둔다
+  g.querySelectorAll('circle.hit').forEach((c) =>
+    c.setAttribute('r', Math.max(r * 2.4, vb[2] * 0.035)));
+  g.querySelectorAll('text').forEach((t) =>
+    t.setAttribute('style', `font-size:${r * 1.15}px`));
+  g.querySelectorAll('g.pin').forEach((p) => {
+    const bx = +p.dataset.x, by = +p.dataset.y;
+    const i = +p.dataset.i, n = +p.dataset.n;
+    if (n > 1) {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      p.setAttribute('transform',
+        `translate(${bx + Math.cos(a) * r * 1.7},${by + Math.sin(a) * r * 1.7})`);
+    } else {
+      p.setAttribute('transform', `translate(${bx},${by})`);
+    }
+  });
+}
+
+function drawMarkers(m, notices) {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg || !m.proj) return 0;
+  const old = svg.querySelector('g.mks');
+  if (old) old.remove();
+  const p = m.proj;
+  const spots = {};
+  for (const n of notices) {
+    if (!n.loc) continue;
+    const x = (n.loc[1] * p.cos - p.sx0) * p.scale;
+    const y = p.h - (n.loc[0] - p.minLat) * p.scale;
+    const k = x.toFixed(1) + ':' + y.toFixed(1);
+    (spots[k] = spots[k] || {x, y, list: []}).list.push(n);
+  }
+  const parts = [];
+  let count = 0;
+  for (const s of Object.values(spots)) {
+    s.list.forEach((n, i) => {
+      count++;
+      const cls = n.closedTypes ? 'close'
+        : n.ratedTypes ? 'short' : 'none';
+      const res = n.closedTypes ? '마감 포함'
+        : n.ratedTypes ? '전 타입 미달' : '결과 미공개';
+      parts.push(`<g class="pin" data-x="${s.x.toFixed(1)}"
+        data-y="${s.y.toFixed(1)}" data-i="${i}" data-n="${s.list.length}"
+        data-id="${n.id}" role="button" tabindex="0">
+        <title>${n.name} · ${n.noticeDate} · ${res}</title>
+        <circle class="hit" r="9" fill="transparent"></circle>
+        <circle class="dot ${cls}" r="4"></circle></g>`);
+    });
+  }
+  if (!count) return 0;
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'mks');
+  g.innerHTML = parts.join('');
+  svg.appendChild(g);
+  g.querySelectorAll('g.pin').forEach((el) => {
+    const go = () => focusNotice(el.dataset.id);
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+  sizeMarkers();
+  return count;
+}
+
+function focusNotice(id) {
+  const el = document.getElementById('nt-' + id);
+  if (!el) return;
+  const y = el.getBoundingClientRect().top + window.scrollY - 12;
+  const box = $('panel');
+  el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1400);
+}
+
 function mark(name) {
-  const el = $('mapbox').querySelector(`path[data-n="${name}"]`);
-  $('mapbox').querySelectorAll('.on').forEach((x) => x.classList.remove('on'));
-  if (el) el.classList.add('on');
-  const t = $('mapbox').querySelector(`text[data-t="${name}"]`);
-  if (t) t.classList.add('on');
+  const box = $('mapbox');
+  box.querySelectorAll('.on,.off').forEach((x) =>
+    x.classList.remove('on', 'off'));
+  box.querySelectorAll('path[data-n]').forEach((x) =>
+    x.classList.add(x.dataset.n === name ? 'on' : 'off'));
+  box.querySelectorAll('text[data-t]').forEach((x) =>
+    x.classList.add(x.dataset.t === name ? 'on' : 'off'));
 }
 
 /* ── 화면 전환 ──────────────────────────── */
@@ -329,7 +476,16 @@ function renderOverview() {
 async function showSido(sido) {
   view = {sido, sgg: null};
   $('mapbox').innerHTML = '<p class="spin">경계를 불러오는 중…</p>';
-  const m = cache.map[sido] || (cache.map[sido] = await grab('map', sido));
+  let m;
+  try {
+    m = cache.map[sido] || (cache.map[sido] = await grab('map', sido));
+  } catch (e) {
+    $('mapbox').innerHTML = `<p class="spin">${sidoFull(sido)} 경계를
+      불러오지 못했습니다. ${e.message}</p>`;
+    $('crumb').innerHTML = '<button id="back">전국</button>';
+    $('back').onclick = showNational;
+    return;
+  }
   const names = Object.keys(m.paths).concat(m.offmap || []);
   // 세종처럼 하위 시군구가 하나뿐인 시도는 두 번 누를 이유가 없다.
   if (names.length === 1) { await showSggOn(sido, m, names[0]); return; }
@@ -343,8 +499,10 @@ async function showSido(sido) {
     `<button id="back">전국</button><b>${m.name}</b>
      <span>시·군·구를 선택하세요</span>`;
   $('back').onclick = showNational;
+  curMap = m;
+  curFull = m.viewBox.split(/[\s,]+/).map(Number);
   drawMap(m, 'sgg', scale, stats, (g) => showSgg(sido, g));
-  if (view.sgg) mark(view.sgg);
+  sizeMarkers();
   $('offmap').innerHTML = (m.offmap || []).map((g) =>
     `<button data-g="${g}">${g}</button>`).join('');
   $('offmap').querySelectorAll('button').forEach((b) =>
@@ -356,7 +514,33 @@ async function showSido(sido) {
 async function showSgg(sido, sgg) {
   view = {sido, sgg};
   mark(sgg);
-  await loadPanel(sido, sgg);
+  const notices = await loadPanel(sido, sgg);
+  // 3단계: 해당 시군구로 확대하고 단지 위치를 얹는다
+  if (curMap && curMap.boxes && curMap.boxes[sgg]) {
+    setView(padBox(curMap.boxes[sgg]), true);
+  }
+  const n = drawMarkers(curMap, notices || []);
+  $('crumb').innerHTML =
+    `<button id="back">전국</button>
+     <button id="wide">${SIDO_FULL[sido]}</button><b>${sgg}</b>`;
+  $('back').onclick = showNational;
+  $('wide').onclick = () => showSido(sido);
+  markerLegend(n, (notices || []).length);
+}
+
+function markerLegend(shown, total) {
+  const base = $('legend').innerHTML.split('<hr')[0];
+  if (!total) { $('legend').innerHTML = base; return; }
+  const miss = total - shown;
+  $('legend').innerHTML = base +
+    `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px">
+     <div>점: 단지 위치 (우편번호 기준 근사)</div>
+     <div style="margin-top:5px">
+       <span class="dot close"></span>마감 타입 있음
+       <span class="dot short" style="margin-left:10px"></span>전 타입 미달
+       <span class="dot none" style="margin-left:10px"></span>결과 미공개</div>
+     ${miss > 0 ? `<div style="margin-top:5px">위치를 찾지 못한 공고
+       ${miss}건은 표시되지 않습니다.</div>` : ''}`;
 }
 
 /* 단일 시군구 시도: 지도는 그 지역만 그리고 상세를 바로 띄운다. */
@@ -366,10 +550,14 @@ async function showSggOn(sido, m, sgg) {
   $('crumb').innerHTML =
     `<button id="back">전국</button><b>${m.name}</b>`;
   $('back').onclick = showNational;
+  curMap = m;
+  curFull = m.viewBox.split(/[\s,]+/).map(Number);
   drawMap(m, 'sgg', scale, {}, () => {});
   mark(sgg);
   $('offmap').innerHTML = '';
-  await loadPanel(sido, sgg);
+  const notices = await loadPanel(sido, sgg);
+  const cnt = drawMarkers(m, notices || []);
+  markerLegend(cnt, (notices || []).length);
 }
 
 async function loadPanel(sido, sgg) {
@@ -377,14 +565,16 @@ async function loadPanel(sido, sgg) {
   try {
     const data = cache.region[sido] ||
       (cache.region[sido] = await grab('region', sido));
-    renderPanel(sido, sgg, data[sgg] || {notices: [], unsold: {}});
+    const R = data[sgg] || {notices: [], unsold: {}};
+    renderPanel(sido, sgg, R);
+    if (window.matchMedia('(max-width:860px)').matches)
+      $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    return R.notices || [];
   } catch (e) {
     $('panel').innerHTML = `<p class="empty">${sgg} 자료를 불러오지
       못했습니다. ${e.message}</p>`;
-    return;
+    return [];
   }
-  if (window.matchMedia('(max-width:860px)').matches)
-    $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 /* ── 결과 패널 ──────────────────────────── */
@@ -484,8 +674,9 @@ function notice(n) {
     n.avgPyeong ? `평균 ${fmt(n.avgPyeong)}만원/평` : null]
     .filter(Boolean).join(' · ');
 
-  return `<div class="nt">
-    <div class="nt-hd"><span class="nm">${n.name}</span>
+  const dot = n.closedTypes ? 'close' : n.ratedTypes ? 'short' : 'none';
+  return `<div class="nt" id="nt-${n.id}">
+    <div class="nt-hd"><span class="nm"><span class="dot ${dot}"></span>${n.name}</span>
       <span class="dt num">공고 ${n.noticeDate}</span></div>
     <div class="nt-meta">${meta}</div>
     <div class="nt-meta">${n.addr || ''}</div>

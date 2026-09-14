@@ -14,6 +14,7 @@ from datetime import date, timedelta
 
 import regions as R
 from slug import SLUG
+from geocode import clean_addr
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(ROOT, "raw")
@@ -311,6 +312,17 @@ def weighted_avg(pairs):
     return round(num_ / den) if den else None
 
 
+def load_geo_cache():
+    """geocode.py 가 만든 우편번호·주소 -> 좌표 표."""
+    p = os.path.join(WEB, "geo-cache.json")
+    return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
+
+
+def geo_key(n):
+    z = str(n.get("HSSPLY_ZIP") or "").strip()
+    return z if z.isdigit() else clean_addr(n.get("HSSPLY_ADRES"))
+
+
 def aggregate(data, unsold, loc, today=None):
     today = today or date.today()
     frm = today.replace(year=today.year - YEARS_BACK).isoformat()
@@ -323,8 +335,9 @@ def aggregate(data, unsold, loc, today=None):
     for c in data["cmpet"]:
         cmpets[c["HOUSE_MANAGE_NO"]].append(c)
 
+    geo = load_geo_cache()
     regions = collections.defaultdict(lambda: {"notices": []})
-    used = 0
+    used, located = 0, 0
     for n in data["notice"]:
         d = n.get("RCRIT_PBLANC_DE") or ""
         if not (frm <= d <= to):
@@ -336,6 +349,9 @@ def aggregate(data, unsold, loc, today=None):
         if not sgg:
             continue
         mno = n["HOUSE_MANAGE_NO"]
+        coord = geo.get(geo_key(n))
+        if coord:
+            located += 1
         types = build_types(models.get(mno, []), cmpets.get(mno, []))
         supply = sum(t["total"] for t in types)
         rec = {
@@ -349,6 +365,7 @@ def aggregate(data, unsold, loc, today=None):
             "kind": n.get("HOUSE_DTL_SECD_NM"),
             "rent": n.get("RENT_SECD_NM"),
             "totalHshld": n.get("TOT_SUPLY_HSHLDCO") or supply,
+            "loc": coord,                       # [위도, 경도] 또는 None
             "url": n.get("PBLANC_URL"),
             "homepage": n.get("HMPG_ADRES"),
             "speculative": n.get("MDAT_TRGET_AREA_SECD") == "Y",
@@ -400,6 +417,7 @@ def aggregate(data, unsold, loc, today=None):
             "unsoldBaseYm": base_ym.get("total"),
             "unsoldAfterBaseYm": base_ym.get("after"),
             "unresolved": len(loc.unresolved),
+            "located": located,
         },
         "regions": dict(regions),
         "sidoSummary": dict(sido_summary),
@@ -473,6 +491,7 @@ def main():
     matched = sum(len(v["notices"]) for v in out["regions"].values())
     print(f"\n최근 {YEARS_BACK}년 공고 {m['noticeCount']}건 중 {matched}건 시군구 매칭"
           f" ({matched / max(m['noticeCount'], 1) * 100:.1f}%)")
+    print(f"좌표 확보 {m['located']}건 ({m['located'] / max(matched, 1) * 100:.1f}%)")
     print(f"미분양 기준월 전체 {m['unsoldBaseYm']} / 준공후 {m['unsoldAfterBaseYm']}")
     if loc.unresolved:
         print("주소 미해석:")

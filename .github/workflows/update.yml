@@ -3,13 +3,13 @@
 # DATA_GO_KR_KEY, KOSIS_KEY 로 넣는다. .env 파일은 커밋하지 않는다.
 name: 자료 갱신
 
-name: 자료 갱신
-
 on:
   schedule:
-    # 매일 UTC 20:00 (한국 시간 새벽 5시) 자동 실행
-    - cron: '0 20 * * *'
-  workflow_dispatch: # 지금처럼 수동으로 누를 수 있는 버튼도 그대로 유지
+    - cron: "0 20 * * *"      # UTC 20:00 = 한국시간 05:00
+  workflow_dispatch:           # 필요할 때 수동 실행
+
+permissions:
+  contents: write
 
 jobs:
   update:
@@ -27,15 +27,23 @@ jobs:
         env:
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
           KOSIS_KEY: ${{ secrets.KOSIS_KEY }}
+        run: python etl.py
+
+      # 새로 올라온 공고의 우편번호만 좌표를 구한다.
+      # 캐시에 있는 건 건너뛰므로 보통 몇 초면 끝난다.
+      - name: 단지 좌표 보충
+        run: python geocode.py
+
+      - name: 좌표 반영 후 재집계
         run: |
-          python etl.py
+          python etl.py --offline
           python build_standalone.py
 
       - name: 변경분 커밋
         run: |
           git config user.name  "github-actions"
           git config user.email "actions@github.com"
-          git add web/index.json web/region web/standalone.html
+          git add web/index.json web/region web/geo-cache.json web/standalone.html
           git diff --staged --quiet && echo "변경 없음" && exit 0
           git commit -m "자료 갱신 $(date -u +%Y-%m-%d)"
           git push
