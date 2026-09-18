@@ -80,6 +80,28 @@ svg.map text.dim{fill:var(--muted)}
 svg.map text.on{font-weight:700}
 svg.map rect.mk{fill:var(--blue);pointer-events:none}
 
+/* 읍면동 경계: 시군구를 고르면 그 안쪽에만 얹는다 */
+svg.map g.emd path{fill:transparent;stroke:rgba(25,28,24,.32);
+  stroke-width:1;stroke-linejoin:round;cursor:pointer;transition:fill .12s}
+svg.map g.emd path:hover{fill:rgba(44,74,124,.10);
+  stroke:rgba(25,28,24,.55);stroke-width:1}
+svg.map g.emd path.on{fill:rgba(44,74,124,.16);stroke:var(--blue);
+  stroke-width:2}
+svg.map g.emd text{fill:var(--muted);font-weight:450}
+svg.map g.emd text.hide{display:none}
+/* 읍면동 이름이 나오면 시군구 이름표와 그 옆 공고 표시는 감춘다 */
+svg.map.emdon>text,svg.map.emdon>rect.mk{display:none}
+svg.map g.mks g.pin.dim{opacity:.18}
+
+.dongbar{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+  margin:26px 0 -6px;padding:7px 11px;background:var(--card);
+  border:1px solid var(--rule);border-radius:3px;font-size:13px}
+.dongbar b{font-weight:640}
+.dongbar span{color:var(--muted);font-size:12.5px}
+.dongbar button{margin-left:auto;border:1px solid var(--rule);
+  border-radius:3px;padding:2px 9px;font-size:12.5px}
+.dongbar button:hover{border-color:var(--ink)}
+
 .legend{margin-top:14px;font-size:12.5px;color:var(--muted)}
 .legend .bar{display:flex;margin:6px 0 4px}
 .legend .bar i{flex:1;height:9px}
@@ -191,8 +213,11 @@ tr.pick td b{font-weight:600}
 <script>
 const E = window.__EMBEDDED__ || null;
 const $ = (id) => document.getElementById(id);
-const cache = {map:{}, region:{}};
+const cache = {map:{}, region:{}, emd:{}};
 let IDX = null, NAT = null, view = {sido:null, sgg:null};
+let curDong = null;              // 지금 고른 읍면동
+let curPanel = null;             // 패널을 다시 그릴 때 쓰는 원본
+const NS = 'http://www.w3.org/2000/svg';
 
 async function grab(kind, key) {
   // 파일명은 영문 슬러그를 쓴다. 한글 파일명은 정적 호스팅에서
@@ -201,12 +226,14 @@ async function grab(kind, key) {
   const s = SLUG[key] || key;
   if (E) {
     const hit = kind === 'map' ? (key ? E.map[s] : E.mapNational)
+      : kind === 'emd' ? (E.emd || {})[s]
       : (kind === 'index' ? E.index : E.region[s]);
     if (!hit) throw new Error(`${key} 자료가 파일에 없습니다`);
     return hit;
   }
   const url = kind === 'index' ? 'index.json'
     : kind === 'map' ? (key ? `map/${s}.json` : 'map-national.json')
+    : kind === 'emd' ? `emd/${s}.json`
     : `region/${s}.json`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url} 를 불러오지 못했습니다 (${r.status})`);
@@ -301,7 +328,7 @@ function setView(box, animate) {
     svg.setAttribute('viewBox',
       cur.map((v, i) => (v + (to[i] - v) * e).toFixed(1)).join(' '));
     if (k < 1) requestAnimationFrame(step);
-    else if (svg.querySelector('g.mks')) sizeMarkers();
+    else { sizeMarkers(); layoutEmdLabels(); }
   })(performance.now());
 }
 
@@ -321,9 +348,13 @@ function sizeMarkers() {
   if (!svg) return;
   const vb = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
   const k = vb[2] / (curFull ? curFull[2] : vb[2]);
-  svg.querySelectorAll('text[data-t]').forEach((t) => {
+  svg.querySelectorAll('text[data-fs]').forEach((t) => {
     const base = +t.dataset.fs || 16;
-    t.setAttribute('style', `font-size:${(base * k).toFixed(1)}px`);
+    const fs = base * k;
+    // 글자 테두리(흰 윤곽)도 같이 줄인다. 그냥 두면 확대할수록
+    // 테가 글자를 덮어 읽을 수 없게 된다.
+    t.setAttribute('style',
+      `font-size:${fs.toFixed(2)}px;stroke-width:${(fs * 0.2).toFixed(2)}px`);
   });
   const g = svg.querySelector('g.mks');
   if (!g) return;
@@ -397,6 +428,148 @@ function drawMarkers(m, notices) {
   return count;
 }
 
+/* ── 읍면동 경계 ────────────────────────── */
+/* 시군구로 확대한 뒤 그 안쪽 행정동 경계를 얹는다. 좌표계가 시군구
+   지도와 같아 별도 변환 없이 같은 뷰박스에 그대로 올라간다. */
+async function showEmd(sido, sgg) {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg) return;
+  clearEmd();
+  try {
+    const all = cache.emd[sido] || (cache.emd[sido] = await grab('emd', sido));
+    const data = all[sgg];
+    if (!data) return;                      // 울릉군처럼 지도 밖인 지역
+    if (view.sido !== sido || view.sgg !== sgg) return;   // 그새 옮겨갔다
+    drawEmd(data, sgg);
+  } catch (e) {
+    /* 경계를 못 불러와도 본 기능은 그대로 쓴다 */
+  }
+}
+
+function clearEmd() {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg) return;
+  const g = svg.querySelector('g.emd');
+  if (g) g.remove();
+  svg.classList.remove('emdon');
+}
+
+function drawEmd(data, sgg) {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg) return;
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('class', 'emd');
+  const parts = [];
+  for (const [n, d] of Object.entries(data.paths))
+    parts.push(`<path d="${d}" data-e="${n}" role="button" tabindex="0"
+      vector-effect="non-scaling-stroke"
+      aria-label="${n}"><title>${n}</title></path>`);
+  // 이름은 넓은 동부터 그린다. 겹칠 때 작은 쪽을 감추기 위해서다.
+  const labs = Object.entries(data.labels || {})
+    .sort((a, b) => (b[1][2] || 0) - (a[1][2] || 0));
+  for (const [n, p] of labs)
+    parts.push(`<text data-e="${n}" data-fs="17"
+      x="${p[0]}" y="${p[1]}">${n}</text>`);
+  g.innerHTML = parts.join('');
+  // 시군구 이름표(맨 끝 text들)보다 아래, 시군구 면보다 위에 끼운다.
+  svg.insertBefore(g, svg.querySelector(':scope > text'));
+  svg.classList.add('emdon');
+  g.querySelectorAll('path').forEach((el) => {
+    const go = () => pickDong(el.dataset.e);
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+  sizeMarkers();
+  layoutEmdLabels();
+}
+
+/* 동 이름이 서로 겹치면 넓은 동만 남긴다. 확대 배율이 바뀔 때마다
+   다시 계산한다. */
+function layoutEmdLabels() {
+  const svg = $('mapbox').querySelector('svg');
+  const g = svg && svg.querySelector('g.emd');
+  if (!g) return;
+  const texts = [...g.querySelectorAll('text')];
+  texts.forEach((t) => t.classList.remove('hide'));
+  const placed = [];
+  for (const t of texts) {
+    let b;
+    try { b = t.getBBox(); } catch (e) { continue; }
+    if (!b.width) continue;
+    const pad = b.height * 0.12;
+    const r = [b.x - pad, b.y - pad, b.x + b.width + pad, b.y + b.height + pad];
+    const hit = placed.some((o) =>
+      r[0] < o[2] && o[0] < r[2] && r[1] < o[3] && o[1] < r[3]);
+    if (hit) t.classList.add('hide');
+    else placed.push(r);
+  }
+}
+
+/* 행정동 이름은 주소에 그대로 나오지 않는 경우가 많다.
+   '송림3·5동' -> '송림동', '화수1·화평동' -> '화수동','화평동' 처럼
+   주소에서 찾을 만한 형태를 같이 만든다. */
+function dongAliases(name) {
+  const out = new Set([name]);
+  const tail = name.slice(-1);
+  const body = name.slice(0, -1);
+  out.add(body.replace(/[\d·]/g, '') + tail);
+  for (const part of body.split('·')) {
+    const b = part.replace(/\d/g, '');
+    if (b) out.add(b + tail);
+  }
+  return [...out].filter((x) => x.length >= 3);
+}
+
+function pickDong(name) {
+  curDong = curDong === name ? null : name;
+  const svg = $('mapbox').querySelector('svg');
+  const g = svg && svg.querySelector('g.emd');
+  if (g) g.querySelectorAll('path').forEach((p) =>
+    p.classList.toggle('on', p.dataset.e === curDong));
+  applyDong();
+}
+
+/* 고른 동에 속한 공고를 가린다. 좌표가 있으면 경계 안인지 직접
+   판정하고(브라우저의 isPointInFill), 좌표가 없으면 주소 문자열로
+   맞춰 본다. 둘 다 안 되면 제외하고 몇 건인지 알린다. */
+function dongMembers(name) {
+  const svg = $('mapbox').querySelector('svg');
+  const el = svg && svg.querySelector(`g.emd path[data-e="${CSS.escape(name)}"]`);
+  const ns = (curPanel && curPanel.R.notices) || [];
+  const p = curMap && curMap.proj;
+  const alias = dongAliases(name);
+  const ids = new Set();
+  let unplaced = 0;
+  for (const n of ns) {
+    if (n.loc && el && el.isPointInFill && p) {
+      const x = (n.loc[1] * p.cos - p.sx0) * p.scale;
+      const y = p.h - (n.loc[0] - p.minLat) * p.scale;
+      let hit = false;
+      try { hit = el.isPointInFill(new DOMPoint(x, y)); } catch (e) { hit = false; }
+      if (hit) ids.add(n.id);
+      continue;
+    }
+    const addr = n.addr || '';
+    if (alias.some((a) => addr.includes(a))) ids.add(n.id);
+    else if (!n.loc) unplaced++;
+  }
+  return {ids, unplaced};
+}
+
+function applyDong() {
+  if (!curPanel) return;
+  const info = curDong ? dongMembers(curDong) : null;
+  renderPanel(curPanel.sido, curPanel.sgg, curPanel.R, curDong, info);
+  const svg = $('mapbox').querySelector('svg');
+  const g = svg && svg.querySelector('g.mks');
+  if (g) g.querySelectorAll('g.pin').forEach((el) =>
+    el.classList.toggle('dim', !!info && !info.ids.has(el.dataset.id)));
+  if (curDong && window.matchMedia('(max-width:860px)').matches)
+    $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
 function focusNotice(id) {
   const el = document.getElementById('nt-' + id);
   if (!el) return;
@@ -420,6 +593,7 @@ function mark(name) {
 /* ── 화면 전환 ──────────────────────────── */
 async function showNational() {
   view = {sido: null, sgg: null};
+  curDong = null; curPanel = null;
   NAT = NAT || await grab('map');
   const stats = {};
   for (const [s, v] of Object.entries(IDX.sidoSummary))
@@ -475,6 +649,7 @@ function renderOverview() {
 
 async function showSido(sido) {
   view = {sido, sgg: null};
+  curDong = null; curPanel = null;
   $('mapbox').innerHTML = '<p class="spin">경계를 불러오는 중…</p>';
   let m;
   try {
@@ -513,13 +688,15 @@ async function showSido(sido) {
 
 async function showSgg(sido, sgg) {
   view = {sido, sgg};
+  curDong = null;
   mark(sgg);
   const notices = await loadPanel(sido, sgg);
-  // 3단계: 해당 시군구로 확대하고 단지 위치를 얹는다
+  // 3단계: 해당 시군구로 확대하고 읍면동 경계와 단지 위치를 얹는다
   if (curMap && curMap.boxes && curMap.boxes[sgg]) {
     setView(padBox(curMap.boxes[sgg]), true);
   }
   const n = drawMarkers(curMap, notices || []);
+  await showEmd(sido, sgg);
   $('crumb').innerHTML =
     `<button id="back">전국</button>
      <button id="wide">${SIDO_FULL[sido]}</button><b>${sgg}</b>`;
@@ -530,9 +707,14 @@ async function showSgg(sido, sgg) {
 
 function markerLegend(shown, total) {
   const base = $('legend').innerHTML.split('<hr')[0];
-  if (!total) { $('legend').innerHTML = base; return; }
+  const svg = $('mapbox').querySelector('svg');
+  const hasEmd = svg && svg.querySelector('g.emd');
+  const emdLine = hasEmd
+    ? `<div style="margin-top:9px">가는 선: 읍면동 경계 — 누르면 그 동의
+       공고만 봅니다</div>` : '';
+  if (!total) { $('legend').innerHTML = base + emdLine; return; }
   const miss = total - shown;
-  $('legend').innerHTML = base +
+  $('legend').innerHTML = base + emdLine +
     `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px">
      <div>점: 단지 위치 (우편번호 기준 근사)</div>
      <div style="margin-top:5px">
@@ -546,6 +728,7 @@ function markerLegend(shown, total) {
 /* 단일 시군구 시도: 지도는 그 지역만 그리고 상세를 바로 띄운다. */
 async function showSggOn(sido, m, sgg) {
   view = {sido, sgg};
+  curDong = null;
   const scale = makeScale([]);
   $('crumb').innerHTML =
     `<button id="back">전국</button><b>${m.name}</b>`;
@@ -557,6 +740,7 @@ async function showSggOn(sido, m, sgg) {
   $('offmap').innerHTML = '';
   const notices = await loadPanel(sido, sgg);
   const cnt = drawMarkers(m, notices || []);
+  await showEmd(sido, sgg);
   markerLegend(cnt, (notices || []).length);
 }
 
@@ -566,6 +750,7 @@ async function loadPanel(sido, sgg) {
     const data = cache.region[sido] ||
       (cache.region[sido] = await grab('region', sido));
     const R = data[sgg] || {notices: [], unsold: {}};
+    curPanel = {sido, sgg, R};
     renderPanel(sido, sgg, R);
     if (window.matchMedia('(max-width:860px)').matches)
       $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -578,7 +763,7 @@ async function loadPanel(sido, sgg) {
 }
 
 /* ── 결과 패널 ──────────────────────────── */
-function renderPanel(sido, sgg, R) {
+function renderPanel(sido, sgg, R, dong, info) {
   const M = IDX.meta;
   const ns = R.notices || [];
   const total = R.unsold?.total, after = R.unsold?.after;
@@ -610,13 +795,25 @@ function renderPanel(sido, sgg, R) {
       ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') +
     `</div>`;
 
-  if (!ns.length) {
+  // 읍면동을 고르면 공고 목록만 그 동으로 좁힌다. 미분양·공급 세대는
+  // 시군구 단위 통계라 위쪽 수치는 그대로 둔다.
+  const list = dong && info ? ns.filter((n) => info.ids.has(n.id)) : ns;
+  if (dong) {
+    h += `<div class="dongbar"><b>${dong}</b>
+      <span class="num">공고 ${fmt(list.length)}건</span>
+      ${info && info.unplaced ? `<span>· 좌표가 없어 가를 수 없는 공고
+        ${info.unplaced}건은 빠졌습니다</span>` : ''}
+      <button id="alldong">${sgg} 전체</button></div>`;
+  }
+
+  if (!list.length) {
     h += `<h3>청약 공고</h3>
       <p class="empty" style="margin-top:14px">
-      ${M.noticeFrom} 이후 이 지역의 아파트 분양 공고가 없습니다.</p>`;
+      ${dong ? `${dong}에는 ${M.noticeFrom} 이후 아파트 분양 공고가 없습니다.`
+        : `${M.noticeFrom} 이후 이 지역의 아파트 분양 공고가 없습니다.`}</p>`;
   } else {
     const byYear = {};
-    for (const n of ns) (byYear[n.noticeDate.slice(0, 4)] ||= []).push(n);
+    for (const n of list) (byYear[n.noticeDate.slice(0, 4)] ||= []).push(n);
     const years = Object.keys(byYear).sort().reverse();
     h += `<h3>청약 공고 <span>최근 순</span></h3>`;
     h += years.map((y, i) => {
@@ -639,9 +836,11 @@ function renderPanel(sido, sgg, R) {
     제외했습니다. 접수 직후이거나 경쟁률이 공표되지 않은 공고는
     결과를 비워 두었고, 은행 전산 사정으로 접수건수는 청약홈 최종
     수치와 다를 수 있습니다.
-    자료 생성 ${M.generated}.</div>`;
+    자료 생성 ${M.generated}.${dong ? ' 읍면동 경계는 2018년 통계청 행정동 기준으로, 주소의 법정동과 이름이 다를 수 있습니다.' : ''}</div>`;
 
   $('panel').innerHTML = h;
+  const back = $('alldong');
+  if (back) back.onclick = () => pickDong(dong);
 }
 
 function notice(n) {

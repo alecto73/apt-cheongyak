@@ -2,3 +2,4 @@
 raw/
 web/data.json
 __pycache__/
+geo/

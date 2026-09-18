@@ -11,6 +11,13 @@ emb = {
     "region": {f[:-5]: json.load(open(f"{W}/region/{f}"))
                for f in os.listdir(f"{W}/region")},
 }
+
+# 읍면동 경계는 build_emd.py 를 돌렸을 때만 있다. 없으면 그 층만 빠지고
+# 나머지는 그대로 동작한다.
+if os.path.isdir(f"{W}/emd"):
+    emb["emd"] = {f[:-5]: json.load(open(f"{W}/emd/{f}"))
+                  for f in os.listdir(f"{W}/emd") if f.endswith(".json")}
+
 html = open(f"{W}/index.html", encoding="utf-8").read()
 blob = json.dumps(emb, ensure_ascii=False, separators=(",", ":")) \
         .replace("</", "<\\/")
