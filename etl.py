@@ -9,7 +9,7 @@
 호출량은 전량 수집 기준 20회 미만이다. 청약홈 개발계정 일 40,000건에
 비하면 무시할 수준이므로 증분 수집 없이 매일 전체를 새로 받는다.
 """
-import json, os, sys, time, math, urllib.parse, urllib.request, collections
+import json, os, re, sys, time, math, urllib.parse, urllib.request, collections
 from datetime import date, timedelta
 
 import regions as R
@@ -48,16 +48,36 @@ def load_env():
                 os.environ.setdefault(k, v)
 
 
-def get_json(url, tries=5):
+def scrub(text):
+    """로그에 남길 문자열에서 인증키를 지운다.
+
+    GitHub Actions 가 저장소 Secret 을 자동으로 가려 주기는 하지만,
+    URL 에 실을 때 % 인코딩이 되면 원문과 글자가 달라져 그 가림망을
+    그냥 빠져나간다. 공개 저장소라면 로그도 공개이므로 직접 지운다.
+    """
+    return re.sub(r"((?:serviceKey|apiKey)=)[^&\s]*", r"\1***", str(text))
+
+
+def get_json(url, tries=4, timeout=90):
+    """공공 API 호출. 일시적인 오류는 몇 번 다시 시도한다.
+
+    한 주소에 너무 오래 매달리지 않게 제한을 둔다. 예전에는 180초를
+    5번 기다려서, 응답 없는 주소 하나에 15분을 쓰고 나서야 죽었다.
+    지금은 최악이 6분쯤이고, 시도할 때마다 무엇이 왜 실패했는지 남긴다.
+    """
     last = None
     for i in range(tries):
         try:
-            with urllib.request.urlopen(url, timeout=180) as r:
+            with urllib.request.urlopen(url, timeout=timeout) as r:
                 return json.load(r)
         except Exception as e:      # 초당 호출 제한, 일시적 게이트웨이 오류
             last = e
-            time.sleep(2 * (i + 1))
-    raise RuntimeError(f"요청 실패: {url[:90]}... ({last})")
+            print(f"    [재시도 {i + 1}/{tries}] {type(e).__name__}: "
+                  f"{scrub(e)}\n      {scrub(url)}", flush=True)
+            if i + 1 < tries:
+                time.sleep(3 * (i + 1))
+    raise RuntimeError(f"{tries}번 모두 실패: {scrub(url)}\n"
+                       f"  마지막 오류: {type(last).__name__}: {scrub(last)}")
 
 
 # --------------------------------------------------------------- 수집
@@ -71,13 +91,14 @@ def fetch_applyhome(key):
     }
     out = {}
     for name, (svc, op) in specs.items():
+        print(f"  청약홈 {name} 받는 중…", flush=True)
         rows, page = [], 1
         while True:
             q = urllib.parse.urlencode({"serviceKey": key, "page": page,
                                         "perPage": 2000})
             d = get_json(f"{ODCLOUD}/{svc}/v1/{op}?{q}")
             if "data" not in d:
-                raise RuntimeError(f"{op}: {d}")
+                raise RuntimeError(f"{op}: {scrub(d)}")
             rows += d["data"]
             if len(rows) >= d["totalCount"] or not d["data"]:
                 break
@@ -85,7 +106,7 @@ def fetch_applyhome(key):
             time.sleep(0.4)
         json.dump(rows, open(f"{RAW}/{name}.json", "w"), ensure_ascii=False)
         out[name] = rows
-        print(f"  청약홈 {name}: {len(rows):,}건")
+        print(f"  청약홈 {name}: {len(rows):,}건", flush=True)
     return out
 
 
@@ -93,6 +114,7 @@ def fetch_unsold(key):
     """미분양은 월 1회 갱신이므로 최신 1개 시점만 받는다."""
     out = {}
     for kind, spec in UNSOLD_TABLES.items():
+        print(f"  미분양 {spec['label']} 받는 중…", flush=True)
         meta_url = ("https://kosis.kr/openapi/statisticsData.do?"
                     + urllib.parse.urlencode(
                         {"method": "getMeta", "apiKey": key, "orgId": "116",
@@ -115,7 +137,7 @@ def fetch_unsold(key):
         json.dump(rows, open(f"{RAW}/unsold_{kind}.json", "w"),
                   ensure_ascii=False)
         out[kind] = rows
-        print(f"  미분양 {spec['label']}: {len(rows):,}건")
+        print(f"  미분양 {spec['label']}: {len(rows):,}건", flush=True)
     return out
 
 

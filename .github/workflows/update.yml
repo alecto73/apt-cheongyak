@@ -14,6 +14,14 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    # 외부 API 가 응답하지 않을 때를 대비한 상한. 정상 실행은 2~3분이다.
+    timeout-minutes: 20
+    env:
+      # 파이썬 출력이 버퍼에 모였다가 끝에 한꺼번에 나오면 어느 단계에서
+      # 멈췄는지 보이지 않는다. 줄 단위로 바로 내보내게 한다.
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
     steps:
       - uses: actions/checkout@v4
 
