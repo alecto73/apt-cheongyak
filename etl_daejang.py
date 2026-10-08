@@ -135,7 +135,8 @@ class ApiError(Exception):
         s = f"{self.code} {self.msg}".upper()
         return any(k in s for k in ("NOT_REGISTERED", "NO_OPENAPI", "SERVICE_KEY",
                                     "UNREGISTERED", "DEADLINE", "ACCESS_DENIED",
-                                    "SERVICE ACCESS DENIED", "HTTP 403", "HTTP 404")) \
+                                    "SERVICE ACCESS DENIED", "UNAUTHORIZED",
+                                    "HTTP 401", "HTTP 403", "HTTP 404")) \
             or self.code in ("12", "20", "30", "31", "32", "33")
 
     @property
@@ -187,6 +188,13 @@ class Client:
     """호출 수를 세고, 일시 오류는 다시 시도하는 얇은 래퍼."""
 
     def __init__(self, key, max_calls=MAX_CALLS):
+        # 공공데이터포털 키는 Encoding/Decoding 두 표기가 있다. urlencode 가
+        # 한 번 더 인코딩하므로 Decoding 표기로 맞춘다. Encoding 키를 그대로
+        # 넣으면 apis.data.go.kr 은 SERVICE_KEY_IS_NOT_REGISTERED_ERROR 를 낸다
+        # (청약홈 api.odcloud.kr 은 둘 다 받아줘서 같은 키로도 차이가 난다).
+        key = (key or "").strip()
+        if "%" in key:
+            key = urllib.parse.unquote(key)
         self.key, self.calls, self.max_calls = key, 0, max_calls
         self.exhausted = False
 
@@ -214,7 +222,7 @@ class Client:
                 except Exception:
                     pass
                 last = ApiError(f"HTTP {e.code}", body)
-                if e.code in (403, 404, 429):
+                if e.code in (401, 403, 404, 429):
                     raise last
             except Exception as e:                       # 네트워크 일시 오류
                 last = ApiError(type(e).__name__, scrub(e))
@@ -351,12 +359,75 @@ def clean_trades(rows, today, kind):
             "umdCd": (r.get("umdCd") or "").strip(), "sggCd": (r.get("sggCd") or code).strip(),
             "jibun": jibun, "name": name, "by": to_int(r.get("buildYear")),
             "date": dt, "amt": amt, "ar": ar, "fl": fl,
-            "ppy": amt / (ar / PY),
+            "ppy": None,                     # apply_supply() 가 공급면적 기준으로 채운다
             "direct": (r.get("dealingGbn") or "").strip() == "직거래",
             "road": f"{road} {bon}{'-' + bu if bu else ''}".strip() if road and bon else "",
             "own": (r.get("ownershipGbn") or "").strip() if kind == "silv" else "",
         })
     return out
+
+
+# ------------------------------------------------------------------ 공급면적 환산
+# 실거래 자료에는 전용면적만 있다. 시세를 공급면적 평당가로 보이려면
+# 공급/전용 비율이 필요하다.
+#   1) 청약 공고(web/region)에 주택형별 공급면적이 있는 단지는 그 비율을 쓴다.
+#   2) 나머지는 평형별 통상 비율로 환산한다. 기준점은 시장에서 흔히 쓰는
+#      평형 표기다: 전용 59㎡ ≈ 25평형, 84㎡ ≈ 34평형, 114㎡ ≈ 44평형.
+#      단지·연식마다 전용률이 달라 실제 공급면적과 몇 % 차이 날 수 있다.
+SUPPLY_POINTS = [(40, 1.42), (59.9, 1.38), (84.9, 1.32), (114.9, 1.27),
+                 (135, 1.25), (200, 1.22)]
+
+
+def default_ratio(ar):
+    pts = SUPPLY_POINTS
+    if ar <= pts[0][0]:
+        return pts[0][1]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if ar <= x1:
+            return y0 + (y1 - y0) * (ar - x0) / (x1 - x0)
+    return pts[-1][1]
+
+
+def notice_ratios(notices_by_sgg):
+    """청약 공고 -> {(시도, 시군구): [(정규화 단지명, [(전용, 공급비율)])]}"""
+    out = collections.defaultdict(list)
+    for key, ns in notices_by_sgg.items():
+        for n in ns:
+            pairs = []
+            for t in n.get("types", []):
+                m = re.match(r"\s*(\d+(?:\.\d+)?)", str(t.get("ty") or ""))
+                ex, sup = (float(m.group(1)) if m else None), t.get("area")
+                if ex and sup and 1.05 < sup / ex < 1.8:
+                    pairs.append((ex, sup / ex))
+            if pairs:
+                out[key].append((norm_name(n.get("name")), pairs))
+    return out
+
+
+def apply_supply(trades, ratios):
+    """거래마다 공급면적(sup)과 공급 3.3㎡당 가격(ppy)을 채운다."""
+    memo, hit = {}, 0
+    for t in trades:
+        k = (t["sido"], t["sgg"], norm_name(t["name"]))
+        if k not in memo:
+            best, score = None, 0
+            for nn, pairs in ratios.get((t["sido"], t["sgg"]), []):
+                sc = name_score(nn, k[2])
+                if sc > score:
+                    best, score = pairs, sc
+            memo[k] = best if score >= 0.85 else None
+        pairs = memo[k]
+        if pairs:
+            # 같은 평형대(전용 ±3㎡)의 공고 비율, 없으면 공고 전체 중위
+            near = [r for ex, r in pairs if abs(ex - t["ar"]) <= 3]
+            ratio, src = (median(near) if near else median([r for _, r in pairs])), "공고"
+            hit += 1
+        else:
+            ratio, src = default_ratio(t["ar"]), "환산"
+        t["sup"] = t["ar"] * ratio
+        t["supSrc"] = src
+        t["ppy"] = t["amt"] / (t["sup"] / PY)
+    return hit
 
 
 # ------------------------------------------------------------------ 단지 집계
@@ -378,7 +449,7 @@ def price_block(trades, today):
     last = max(valid, key=lambda t: (t["date"], t["amt"]))
     top = max(valid, key=lambda t: t["amt"])
     return {
-        "ppy": round(ppy), "p84": round(p84) if p84 else round(ppy * 84.9 / PY),
+        "ppy": round(ppy), "p84": round(p84) if p84 else round(ppy * 84.9 * default_ratio(84.9) / PY),
         "p84est": not t84, "n": len(valid), "nRecent": len(recent),
         "basis": "6m" if use is recent else "12m",
         "last": {"d": last["date"].isoformat(), "amt": last["amt"],
@@ -402,6 +473,7 @@ def build_complexes(trades, today):
         bys = [t["by"] for t in ts if t["by"]]
         by = collections.Counter(bys).most_common(1)[0][0] if bys else None
         b, co = brand_of(t0["name"])
+        sup_src = "공고" if any(t["supSrc"] == "공고" for t in ts) else "환산"
         cx.append({
             "id": f"{t0['sggCd']}-{t0['umdCd']}-{jibun}-{nn}"[:80],
             "sido": sido, "sgg": sgg, "code": t0["code"], "gu": lawd.gu_label(t0["code"]),
@@ -410,6 +482,7 @@ def build_complexes(trades, today):
             "name": t0["name"], "nn": nn, "by": by,
             "age": (today.year - by) if by else None,
             "brand": b, "brandCo": co, "hi": bool(b and b in HIGH_END),
+            "supSrc": sup_src,
             **pb,
         })
     return cx
@@ -604,7 +677,7 @@ def pick_leader(cx, tiers, min_n, hhs, proxy):
 def pub(c, h=None, today=None):
     """화면용 단지 레코드."""
     out = {k: c[k] for k in ("name", "gu", "dong", "jibun", "road", "by", "age",
-                             "brand", "brandCo", "hi", "ppy", "p84", "p84est",
+                             "brand", "brandCo", "hi", "supSrc", "ppy", "p84", "p84est",
                              "n", "nRecent", "basis", "last", "max")}
     if h:
         out["hh"] = h.get("hh")
@@ -833,7 +906,7 @@ def main(argv=None, today=None, client=None):
     codes = list(lawd.CODES)
     print(f"실거래 수집: 시군구 코드 {len(codes)}개 × {len(months)}개월", flush=True)
     trade_rows, trade_stop = collect(cli, "trade", codes, months, offline)
-    if trade_stop and trade_stop.fatal and not trade_rows:
+    if trade_stop and not trade_rows:
         sys.exit("아파트 매매 실거래가 상세 자료 API를 쓸 수 없습니다: "
                  f"{scrub(trade_stop)}\n공공데이터포털에서 활용신청 여부를 확인하세요.")
     silv_codes = [c for c in codes if lawd.CODES[c][0] in SILV_SIDO]
@@ -841,6 +914,10 @@ def main(argv=None, today=None, client=None):
 
     trades = clean_trades(trade_rows, today, "trade")
     silv = clean_trades(silv_rows, today, "silv")
+    notices = load_notices()
+    ratios = notice_ratios(notices)
+    h1, h2 = apply_supply(trades, ratios), apply_supply(silv, ratios)
+    print(f"공급면적: 청약 공고 비율 적용 매매 {h1:,}건 · 분양권 {h2:,}건, 나머지는 평형별 환산")
     print(f"매매 {len(trades):,}건 · 분양권/입주권 {len(silv):,}건 (최근 365일, 해제 제외)")
 
     cx = build_complexes(trades, today)
@@ -888,7 +965,7 @@ def main(argv=None, today=None, client=None):
             print(f"  {len(regions)}개 지역 판정 (API 호출 {cli.calls:,}회)", flush=True)
     kapt.save()
 
-    cand = candidates(seed, silv, load_notices(), today)
+    cand = candidates(seed, silv, notices, today)
     for (sido, sgg), lst in cand.items():
         if (sido, sgg) in regions:
             regions[(sido, sgg)]["cand"] = lst
@@ -941,6 +1018,7 @@ def write(regions, today, kapt, cli, trade_stop, silv_stop):
                     "lead": a["lead"]} for s, a in sido_acc.items()}
     meta = {
         "generated": today.isoformat(), "from": frm, "to": today.isoformat(),
+        "area": "supply",
         "trades": sum(v["n"] for v in summary.values()),
         "kapt": kapt.unavailable or "ok",
         "partial": scrub(trade_stop) if trade_stop else None,

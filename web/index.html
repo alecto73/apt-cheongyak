@@ -362,7 +362,7 @@ function drawLegend(scale) {
   if (!scale.cut.length) { $('legend').innerHTML = ''; return; }
   if (MODE === 'dj') {
     $('legend').innerHTML =
-      `<div>색: 평균 매매 시세 (전용 3.3㎡당, 최근 12개월 실거래)</div>
+      `<div>색: 평균 매매 시세 (공급면적 평당가, 최근 12개월 실거래)</div>
        <div class="bar">${scale.cols.map((x) => `<i style="background:${x}"></i>`).join('')}</div>
        <div class="ends num"><span>${fmtPpy(scale.min)}</span><span>${fmtPpy(scale.max)}</span></div>`;
     return;
@@ -1020,7 +1020,7 @@ async function showNationalDj() {
   }
   const stats = {};
   for (const [s, v] of Object.entries(DJ.sidoSummary))
-    stats[s] = {v: v.avg, label: `평균 시세 3.3㎡당 ${fmtPpy(v.avg)}`};
+    stats[s] = {v: v.avg, label: `평균 평당가 ${fmtPpy(v.avg)}`};
   const scale = makeScale(Object.values(stats).map((x) => x.v), PCOLS);
   $('crumb').innerHTML = '<b>전국</b><span>시·도를 선택하세요</span>';
   $('offmap').innerHTML = '';
@@ -1035,7 +1035,7 @@ async function showNationalDj() {
     `<h2 class="place">전국</h2>
      <div class="place-sub">지역별 평균 매매 시세와 대장아파트</div>` +
     djFigs([
-      ['평균 시세', fmtPpy(avg), '', '', '전용 3.3㎡당 · 거래 가중'],
+      ['평균 시세', fmtPpy(avg), '', '', '공급면적 평당가 · 거래 가중'],
       ['매매 거래', fmt(tot), '건', '', `${M.from} ~ ${M.to}`],
       ['시세 1위 시·도', rows[0] ? rows[0][0] : '–', '', 'ochre',
         rows[0] ? fmtPpy(rows[0][1].avg) : ''],
@@ -1063,7 +1063,7 @@ async function showSidoDj(sido, m) {
   for (const [k, v] of Object.entries(DJ.summary)) {
     const [s, g] = k.split('|');
     if (s === sido) stats[g] = {v: v.avg, n: v.cand,
-      label: `평균 시세 3.3㎡당 ${fmtPpy(v.avg)}${v.lead ? ` 대장 ${v.lead}` : ''}`};
+      label: `평균 평당가 ${fmtPpy(v.avg)}${v.lead ? ` 대장 ${v.lead}` : ''}`};
   }
   const scale = makeScale(Object.values(stats).map((x) => x.v), PCOLS);
   $('crumb').innerHTML =
@@ -1087,14 +1087,14 @@ async function showSidoDj(sido, m) {
     `<h2 class="place">${sidoFull(sido)}</h2>
      <div class="place-sub">시·군·구별 평균 시세와 대장아파트 · 최근 12개월 매매 실거래</div>` +
     djFigs([
-      ['평균 시세', fmtPpy(ss.avg), '', '', '전용 3.3㎡당 · 거래 가중'],
+      ['평균 시세', fmtPpy(ss.avg), '', '', '공급면적 평당가 · 거래 가중'],
       ['매매 거래', fmt(tot), '건', '', ''],
       ['최고가 대장', ss.lead ? esc(ss.lead.name) : '–', '', 'ochre',
         ss.lead ? `${esc(ss.lead.sgg)} · ${fmtPpy(ss.lead.ppy)}` : ''],
     ]) +
     `<h3>시·군·구별 <span>평균 시세 높은 순 · 누르면 상세</span></h3>
      <div class="tw"><table><thead><tr>
-       <th>시·군·구</th><th>평균 시세</th><th>84㎡ 중위</th><th>거래</th>
+       <th>시·군·구</th><th>평균 시세</th><th>전용84㎡ 중위</th><th>거래</th>
        <th>대장</th><th>대장 시세</th></tr></thead><tbody>` +
     rows.map(([g, v]) => `<tr class="pick" data-g="${g}">
        <td><b>${g}</b></td>
@@ -1276,8 +1276,8 @@ function leadCard(c, kind, R) {
     <div class="tags">${tags}</div>
     <dl class="kv">
       <dt>시세</dt><dd><span class="big num">${fmtPpy(c.ppy)}</span>
-        <span style="color:var(--muted)"> 전용 3.3㎡당</span>
-        · 84㎡ <b class="num">${fmtWon(c.p84)}</b>${c.p84est ? ' <span style="color:var(--muted)">(환산)</span>' : ''}</dd>
+        <span style="color:var(--muted)"> 평당 (공급면적${c.supSrc === '공고' ? ', 분양공고 면적' : ', 평형 환산'})</span>
+        · 전용84㎡ <b class="num">${fmtWon(c.p84)}</b>${c.p84est ? ' <span style="color:var(--muted)">(환산)</span>' : ''}</dd>
       ${lead}
       <dt>규모</dt><dd>${hhText(c)}${age ? ' · ' + age : ''}${c.builder ? ' · ' + esc(c.builder) : ''}</dd>
       <dt>위치</dt><dd>${esc(where)}</dd>
@@ -1291,8 +1291,8 @@ function renderDjPanel(sido, sgg, R, dong) {
   let h = `<h2 class="place">${sgg}</h2>
     <div class="place-sub">${sidoFull(sido)} · 최근 12개월 매매 실거래 ${fmt(st.n)}건</div>` +
     djFigs([
-      ['평균 시세', fmtPpy(st.avg), '', '', '전용 3.3㎡당 · 거래 평균'],
-      ['84㎡ 중위 거래가', fmtWon(st.p84), '', '', st.n84 ? `${fmt(st.n84)}건 기준` : ''],
+      ['평균 시세', fmtPpy(st.avg), '', '', '공급면적 평당가 · 거래 평균'],
+      ['전용84㎡ 중위가', fmtWon(st.p84), '', '', st.n84 ? `${fmt(st.n84)}건 기준` : ''],
       ['매매 거래', fmt(st.n), '건', '', `${M.from} ~ ${M.to}`],
       ['대장 시세', L ? fmtPpy(L.ppy) : '–', '', 'ochre', L ? esc(L.name) : '기준 충족 단지 없음'],
       ['평균 대비', L && L.lead ? L.lead.toFixed(2) : '–', L ? '배' : '', 'ochre', ''],
@@ -1300,12 +1300,12 @@ function renderDjPanel(sido, sgg, R, dong) {
         L ? esc(L.tierText) : esc((R.tiers || [])[0] || '')],
     ]);
 
-  h += `<h3>대장아파트 <span>${esc((R.tiers || [])[0])} 중 3.3㎡당 시세 1위</span></h3>`;
+  h += `<h3>대장아파트 <span>${esc((R.tiers || [])[0])} 중 평당가 1위</span></h3>`;
   h += L ? leadCard(L, 'lead', R)
     : `<p class="empty" style="margin-top:14px">기준을 끝까지 완화해도(${esc((R.tiers || []).slice(-1)[0])})
         해당하는 단지가 없습니다.</p>`;
   if (R.top) {
-    h += `<p style="margin:14px 0 0;font-size:13px;color:var(--muted)">기준과 상관없이 3.3㎡당
+    h += `<p style="margin:14px 0 0;font-size:13px;color:var(--muted)">기준과 상관없이 평당
       시세가 가장 높은 단지는 따로 있습니다. 재건축을 앞둔 구축이나 소단지인 경우가 많습니다.</p>`;
     h += leadCard(R.top, 'top', R);
   }
@@ -1322,9 +1322,9 @@ function renderDjPanel(sido, sgg, R, dong) {
 
   const nt = R.newTop || [];
   if (nt.length) {
-    h += `<h3>신축 시세 상위 <span>준공 10년 이내 · 3.3㎡당 시세 순</span></h3>
+    h += `<h3>신축 시세 상위 <span>준공 10년 이내 · 평당가 순</span></h3>
       <div class="tw"><table><thead><tr><th>단지</th><th>법정동</th><th>준공</th>
-      <th>세대</th><th>3.3㎡당</th><th>84㎡</th><th>거래</th></tr></thead><tbody>` +
+      <th>세대</th><th>평당가</th><th>전용84㎡</th><th>거래</th></tr></thead><tbody>` +
       nt.map((c) => `<tr><td class="l"><b>${esc(c.name)}</b> ${djTags(c)}</td>
         <td>${esc(c.dong)}</td><td class="num">${c.by ?? '–'}</td>
         <td class="num">${c.hh ? fmt(c.hh) : '–'}</td>
@@ -1377,7 +1377,7 @@ function candCard(c, i, L) {
     <div class="nt-meta">${[esc(c.gu) + ' ' + esc(c.dong), c.hh ? fmt(c.hh) + '세대' : '세대수 미확인',
       c.builder ? esc(c.builder) : '', mv].filter(Boolean).join(' · ')}${c.note ? ' · ' + esc(c.note) : ''}</div>
     <div class="row">
-      ${s ? `<span>분양권·입주권 <b class="num">${fmtPpy(s.ppy)}</b> /3.3㎡ · 84㎡ <b class="num">${fmtWon(s.p84)}</b>${s.p84est ? '(환산)' : ''}
+      ${s ? `<span>분양권·입주권 <b class="num">${fmtPpy(s.ppy)}</b> /평 · 전용84㎡ <b class="num">${fmtWon(s.p84)}</b>${s.p84est ? '(환산)' : ''}
         <span style="color:var(--muted)">(${s.n}건, 최근 ${s.last.d})</span> ${cmp}</span>`
         : '<span style="color:var(--muted)">최근 12개월 분양권·입주권 거래 없음</span>'}
       ${c.sale84 ? `<span>84㎡ 분양가 <b class="num">${fmtWon(c.sale84)}</b>
@@ -1394,11 +1394,13 @@ function djFoot(detail) {
   if (M.partial) warn.push(`실거래 수집이 중간에 멈춰 일부 지역이 빠졌을 수 있습니다 (${esc(M.partial)}).`);
   return `<div class="foot">
     시세는 국토교통부 아파트 매매 실거래가(공공데이터포털) ${M.from} ~ ${M.to} 계약분이며
-    해제 거래와 직거래는 뺐습니다. 3.3㎡당 가격은 전용면적 기준으로, 공급면적 기준인
-    시중 평당가보다 높게 나옵니다. 단지 시세는 최근 6개월 거래가 3건 이상이면 그
-    기간의, 아니면 12개월 전체의 중위값입니다. 84㎡는 전용 80~90㎡ 거래의 중위
-    거래가이며, 해당 평형 거래가 없으면 3.3㎡당 시세로 환산했습니다(*).
-    ${detail ? `대장은 연식·세대수 기준을 통과한 단지 중 3.3㎡당 시세 1위이고, 브랜드는
+    해제 거래와 직거래는 뺐습니다. 시세는 공급면적 평당가(3.3㎡당)입니다. 실거래 자료에는
+    전용면적만 있어, 청약홈 분양공고에 주택형별 공급면적이 있는 단지는 그 비율을 쓰고
+    나머지는 평형별 통상 비율(전용 59㎡≈25평, 84㎡≈34평, 114㎡≈44평)로 환산했습니다.
+    환산 단지는 실제 공급면적과 몇 % 차이가 날 수 있습니다. 단지 시세는 최근 6개월
+    거래가 3건 이상이면 그 기간의, 아니면 12개월 전체의 중위값입니다. 전용84㎡는 전용
+    80~90㎡ 거래의 중위 거래가이며, 해당 평형 거래가 없으면 평당가로 환산했습니다(*).
+    ${detail ? `대장은 연식·세대수 기준을 통과한 단지 중 평당가 1위이고, 브랜드는
     표시만 합니다. 기준을 통과한 단지가 없으면 단계적으로 완화하고 '완화'로 표시합니다.
     세대수는 공동주택관리정보시스템(K-apt)과, 신축·미준공 단지는 언론 보도를 확인한
     조사값입니다. 대장후보 시세는 분양권·입주권 실거래(국토교통부)입니다.` : ''}
@@ -1430,7 +1432,7 @@ function srcLine() {
   if (MODE === 'dj') {
     $('src').innerHTML = DJ
       ? `매매 실거래 국토교통부 · ${DJ.meta.from} ~ ${DJ.meta.to}
-         <br>거래 ${fmt(DJ.meta.trades)}건 · 3.3㎡당은 전용면적 기준`
+         <br>거래 ${fmt(DJ.meta.trades)}건 · 시세는 공급면적 평당가`
       : '매매 실거래 국토교통부';
     if (!DJ) ensureDj().then(srcLine).catch(() => {});
     return;
