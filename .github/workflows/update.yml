@@ -1,6 +1,7 @@
-# 매일 새벽 자료를 갱신한다.
+# 매주 새벽 자료를 갱신한다.
 # 인증키는 저장소 Settings > Secrets and variables > Actions 에
 # DATA_GO_KR_KEY, KOSIS_KEY 로 넣는다. .env 파일은 커밋하지 않는다.
+# KAKAO_REST_KEY 는 선택이다. 있으면 대장아파트 좌표를 카카오로 구한다.
 name: 자료 갱신
 
 on:
@@ -14,15 +15,16 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
-    # 외부 API 가 응답하지 않을 때를 대비한 상한. 정상 실행은 2~3분이다.
-    timeout-minutes: 20
+    # 대장아파트 첫 수집(전국 13개월 실거래)이 길어서 넉넉히 잡는다.
+    # 두 번째부터는 지난 달 자료를 캐시에서 꺼내 쓰므로 훨씬 짧다.
+    timeout-minutes: 120
     env:
       # 파이썬 출력이 버퍼에 모였다가 끝에 한꺼번에 나오면 어느 단계에서
       # 멈췄는지 보이지 않는다. 줄 단위로 바로 내보내게 한다.
       PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
-    
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -41,15 +43,36 @@ jobs:
         run: python geocode.py
 
       - name: 좌표 반영 후 재집계
-        run: |
-          python etl.py --offline
-          python build_standalone.py
+        run: python etl.py --offline
+
+      # 대장아파트: 실거래 원자료(raw/rtms)는 커밋하지 않고 Actions 캐시에 둔다.
+      - name: 실거래 캐시 복원
+        uses: actions/cache@v4
+        with:
+          path: raw/rtms
+          key: rtms-${{ github.run_id }}
+          restore-keys: rtms-
+
+      # 실패해도 청약·미분양 갱신은 그대로 커밋되게 한다.
+      - name: 대장아파트 집계
+        continue-on-error: true
+        timeout-minutes: 90
+        env:
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+        run: python etl_daejang.py
+
+      - name: 단일 파일 판본
+        run: python build_standalone.py
 
       - name: 변경분 커밋
         run: |
           git config user.name  "github-actions"
           git config user.email "actions@github.com"
           git add web/index.json web/region web/geo-cache.json web/standalone.html
+          for f in web/daejang web/daejang-geo.json kapt-cache.json; do
+            [ -e "$f" ] && git add "$f"
+          done
           git diff --staged --quiet && echo "변경 없음" && exit 0
           git commit -m "자료 갱신 $(date -u +%Y-%m-%d)"
           git push

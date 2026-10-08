@@ -25,6 +25,16 @@ if os.path.isdir(f"{W}/emd"):
     emb["emd"] = {f[:-5]: load(f"{W}/emd/{f}")
                   for f in os.listdir(f"{W}/emd") if f.endswith(".json")}
 
+# 대장아파트 자료는 etl_daejang.py 를 돌렸을 때만 있다. 없으면 그 보기만
+# '자료 없음'으로 나오고 청약·미분양은 그대로 동작한다.
+D = f"{W}/daejang"
+if os.path.exists(f"{D}/index.json"):
+    emb["daejang"] = {
+        "index": load(f"{D}/index.json"),
+        "region": {f[:-5]: load(f"{D}/{f}") for f in os.listdir(D)
+                   if f.endswith(".json") and f != "index.json"},
+    }
+
 html = open(f"{W}/index.html", encoding="utf-8").read()
 blob = json.dumps(emb, ensure_ascii=False, separators=(",", ":")) \
         .replace("</", "<\\/")

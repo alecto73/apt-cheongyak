@@ -10,6 +10,7 @@
   --paper:#eeefea; --card:#f7f7f4; --ink:#191c18; --rule:#d3d5cc;
   --muted:#6e7269; --blue:#2c4a7c; --ochre:#8a5a12; --warn:#8c3a2b;
   --u0:#e6e7e0; --u1:#e2dcc4; --u2:#d8c79a; --u3:#c9a962; --u4:#a87a2a;
+  --p1:#dfe3e8; --p2:#b9c4d3; --p3:#8597b2; --p4:#4f6788;
   --pad:clamp(16px,3vw,32px);
 }
 *{box-sizing:border-box}
@@ -188,11 +189,57 @@ tr.pick td b{font-weight:600}
 .foot{margin:34px 0 40px;font-size:12px;color:var(--muted);
   border-top:1px solid var(--rule);padding-top:12px;max-width:60em}
 .spin{color:var(--muted);font-size:13.5px;padding:8px 0}
+
+/* ── 보기 전환 ──────────────────────────── */
+.modes{display:inline-flex;border:1px solid var(--rule);border-radius:4px;
+  overflow:hidden;background:var(--card)}
+.modes button{padding:4px 12px;font-size:13px;color:var(--muted)}
+.modes button+button{border-left:1px solid var(--rule)}
+.modes button.on{background:var(--ink);color:var(--paper);font-weight:600}
+
+/* ── 대장아파트 ─────────────────────────── */
+.lead{margin-top:14px;padding:16px 18px 15px;background:var(--card);
+  border:1px solid var(--rule);border-left:3px solid var(--ochre);border-radius:3px;
+  scroll-margin-top:14px;transition:background .3s}
+.lead.flash,.dj-row.flash td,.cand.flash{background:#e6e7df}
+.lead .nm{font-size:20px;font-weight:680;letter-spacing:-.03em}
+.lead .kv{display:grid;grid-template-columns:4.6em 1fr;gap:3px 10px;
+  margin-top:10px;font-size:13.5px}
+.lead .kv dt{color:var(--muted)}
+.lead .kv dd{margin:0}
+.lead .big{font-size:22px;font-weight:650;letter-spacing:-.03em;color:var(--ochre)}
+.lead.alt{border-left-color:var(--muted)}
+.lead.alt .nm{font-size:17px}
+.tag.brand{border-color:rgba(25,28,24,.35);color:var(--ink)}
+.tag.hi{border-color:rgba(138,90,18,.55);color:var(--ochre)}
+.tag.relax{border-color:rgba(140,58,43,.45);color:var(--warn)}
+.tag.st{border-color:rgba(44,74,124,.45);color:var(--blue)}
+.cand{padding:14px 0 15px;border-bottom:1px solid var(--rule);scroll-margin-top:14px}
+.cand .nm{font-size:16px;font-weight:620;letter-spacing:-.02em}
+.cand .row{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px;font-size:13px}
+.cand .row b{font-weight:620}
+.cmp{display:inline-block;font-size:12px;padding:0 6px;border-radius:2px;
+  background:rgba(138,90,18,.12);color:var(--ochre);font-weight:600}
+.cmp.up{background:rgba(140,58,43,.12);color:var(--warn)}
+td.l{text-align:left;white-space:normal;min-width:7em}
+tr.dj-row.dim td{opacity:.35}
+@media(max-width:520px){td .tag{display:none}}
+.mk-lg i{display:inline-block;width:9px;height:9px;border-radius:50%;
+  vertical-align:0;margin:0 5px 0 0}
+.mk-lg span{margin-right:12px;white-space:nowrap}
+svg.map g.mks circle.dot.lead{fill:var(--ochre)}
+svg.map g.mks circle.dot.dl{fill:var(--blue)}
+svg.map g.mks circle.dot.cand{fill:var(--paper);stroke:var(--blue)!important}
+svg.map g.mks circle.dot.top{fill:var(--muted)}
 </style>
 </head>
 <body>
 <header>
-  <h1>시군구 청약·미분양 조회</h1>
+  <h1 id="ttl">시군구 청약·미분양 조회</h1>
+  <div class="modes" role="tablist" aria-label="보기">
+    <button id="m-cy" class="on" role="tab" aria-selected="true">청약·미분양</button>
+    <button id="m-dj" role="tab" aria-selected="false">대장아파트</button>
+  </div>
   <div class="src" id="src"></div>
 </header>
 
@@ -213,7 +260,9 @@ tr.pick td b{font-weight:600}
 <script>
 const E = window.__EMBEDDED__ || null;
 const $ = (id) => document.getElementById(id);
-const cache = {map:{}, region:{}, emd:{}};
+const cache = {map:{}, region:{}, emd:{}, dj:{}};
+let MODE = 'cy';                 // cy: 청약·미분양, dj: 대장아파트
+let DJ = null;                   // 대장아파트 요약 (daejang/index.json)
 let IDX = null, NAT = null, view = {sido:null, sgg:null};
 let curDong = null;              // 지금 고른 읍면동
 let curPanel = null;             // 패널을 다시 그릴 때 쓰는 원본
@@ -225,8 +274,11 @@ async function grab(kind, key) {
   // 같은 키를 쓰므로 여기서 한 번만 변환한다.
   const s = SLUG[key] || key;
   if (E) {
+    const dj = E.daejang || {};
     const hit = kind === 'map' ? (key ? E.map[s] : E.mapNational)
       : kind === 'emd' ? (E.emd || {})[s]
+      : kind === 'djindex' ? dj.index
+      : kind === 'dj' ? (dj.region || {})[s]
       : (kind === 'index' ? E.index : E.region[s]);
     if (!hit) throw new Error(`${key} 자료가 파일에 없습니다`);
     return hit;
@@ -234,6 +286,8 @@ async function grab(kind, key) {
   const url = kind === 'index' ? 'index.json'
     : kind === 'map' ? (key ? `map/${s}.json` : 'map-national.json')
     : kind === 'emd' ? `emd/${s}.json`
+    : kind === 'djindex' ? 'daejang/index.json'
+    : kind === 'dj' ? `daejang/${s}.json`
     : `region/${s}.json`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url} 를 불러오지 못했습니다 (${r.status})`);
@@ -245,14 +299,14 @@ const fmt = (n) => n == null ? '–' : n.toLocaleString('ko-KR');
 /* 미분양 세대수를 5단계로 나눈다. 상위 지역이 워낙 커서
    등간격으로 자르면 대부분이 최하 단계로 뭉친다. 실제 분포를
    보고 자를 수 있게 분위수를 쓴다. */
-function makeScale(values) {
+function makeScale(values, cols) {
   const v = values.filter((x) => x > 0).sort((a, b) => a - b);
   if (!v.length) return {cut: [], color: () => 'var(--u0)', max: 0};
   const q = (p) => v[Math.min(v.length - 1, Math.floor(v.length * p))];
   const cut = [q(0.25), q(0.5), q(0.75), q(0.92)];
-  const cols = ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
+  cols = cols || ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
   return {
-    cut, max: v[v.length - 1],
+    cut, cols, min: v[0], max: v[v.length - 1],
     color(n) {
       if (!n) return 'var(--u0)';
       for (let i = 0; i < cut.length; i++) if (n <= cut[i]) return cols[i];
@@ -272,10 +326,11 @@ function drawMap(m, level, scale, stats, onPick) {
       aria-label="${level === 'nat' ? '전국 시도' : '시군구'} 지도">`];
   for (const n of names) {
     const s = stats[n] || {};
+    const val = s.v !== undefined ? s.v : s.unsold;
     svg.push(`<path d="${m.paths[n]}" data-n="${n}"
-      fill="${scale.color(s.unsold)}" role="button" tabindex="0"
+      fill="${scale.color(val)}" role="button" tabindex="0"
       vector-effect="non-scaling-stroke"
-      aria-label="${n} 미분양 ${fmt(s.unsold)}호"></path>`);
+      aria-label="${n} ${s.label || `미분양 ${fmt(s.unsold)}호`}"></path>`);
   }
   for (const n of names) {
     let p = m.labels[n]; if (!p) continue;
@@ -283,7 +338,7 @@ function drawMap(m, level, scale, stats, onPick) {
       p = [p[0] + NUDGE[n][0], p[1] + NUDGE[n][1]];
     const s = stats[n] || {};
     const small = level !== 'nat' && names.length > 20;
-    const cls = s.unsold || s.n ? '' : ' class="dim"';
+    const cls = (s.v !== undefined ? s.v : s.unsold) || s.n ? '' : ' class="dim"';
     if (s.n) svg.push(`<rect class="mk" x="${p[0] - (small ? 24 : 30)}"
       y="${p[1] - (small ? 9 : 11)}" width="${small ? 7 : 8}"
       height="${small ? 7 : 8}"></rect>`);
@@ -305,6 +360,13 @@ function drawMap(m, level, scale, stats, onPick) {
 
 function drawLegend(scale) {
   if (!scale.cut.length) { $('legend').innerHTML = ''; return; }
+  if (MODE === 'dj') {
+    $('legend').innerHTML =
+      `<div>색: 평균 매매 시세 (전용 3.3㎡당, 최근 12개월 실거래)</div>
+       <div class="bar">${scale.cols.map((x) => `<i style="background:${x}"></i>`).join('')}</div>
+       <div class="ends num"><span>${fmtPpy(scale.min)}</span><span>${fmtPpy(scale.max)}</span></div>`;
+    return;
+  }
   const c = ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
   $('legend').innerHTML =
     `<div>색: 미분양 세대수 (호)</div>
@@ -360,8 +422,9 @@ function sizeMarkers() {
   if (!g) return;
   const r = Math.max(2.5, vb[2] * 0.018);
   g.querySelectorAll('circle.dot').forEach((c) => {
-    c.setAttribute('r', r);
-    c.setAttribute('stroke-width', r * 0.28);
+    const k = +c.dataset.k || 1;
+    c.setAttribute('r', r * k);
+    c.setAttribute('stroke-width', r * (c.classList.contains('cand') ? 0.45 : 0.28));
   });
   // 손가락으로 누를 수 있게 보이지 않는 큰 판을 깔아둔다
   g.querySelectorAll('circle.hit').forEach((c) =>
@@ -515,6 +578,7 @@ function dongAliases(name) {
   const tail = name.slice(-1);
   const body = name.slice(0, -1);
   out.add(body.replace(/[\d·]/g, '') + tail);
+  out.add(body.replace(/[\d·]/g, '').replace(/본$/, '') + tail);   // 방배본동 -> 방배동
   for (const part of body.split('·')) {
     const b = part.replace(/\d/g, '');
     if (b) out.add(b + tail);
@@ -560,6 +624,12 @@ function dongMembers(name) {
 
 function applyDong() {
   if (!curPanel) return;
+  if (curPanel.dj) {
+    renderDjPanel(curPanel.sido, curPanel.sgg, curPanel.R, curDong);
+    if (curDong && window.matchMedia('(max-width:860px)').matches)
+      $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    return;
+  }
   const info = curDong ? dongMembers(curDong) : null;
   renderPanel(curPanel.sido, curPanel.sgg, curPanel.R, curDong, info);
   const svg = $('mapbox').querySelector('svg');
@@ -595,6 +665,7 @@ async function showNational() {
   view = {sido: null, sgg: null};
   curDong = null; curPanel = null;
   NAT = NAT || await grab('map');
+  if (MODE === 'dj') return showNationalDj();
   const stats = {};
   for (const [s, v] of Object.entries(IDX.sidoSummary))
     stats[s] = {unsold: v.total, n: v.notices};
@@ -664,6 +735,7 @@ async function showSido(sido) {
   const names = Object.keys(m.paths).concat(m.offmap || []);
   // 세종처럼 하위 시군구가 하나뿐인 시도는 두 번 누를 이유가 없다.
   if (names.length === 1) { await showSggOn(sido, m, names[0]); return; }
+  if (MODE === 'dj') return showSidoDj(sido, m);
   const stats = {};
   for (const [k, v] of Object.entries(IDX.summary)) {
     const [s, g] = k.split('|');
@@ -690,6 +762,7 @@ async function showSgg(sido, sgg) {
   view = {sido, sgg};
   curDong = null;
   mark(sgg);
+  if (MODE === 'dj') return showSggDj(sido, sgg);
   const notices = await loadPanel(sido, sgg);
   // 3단계: 해당 시군구로 확대하고 읍면동 경계와 단지 위치를 얹는다
   if (curMap && curMap.boxes && curMap.boxes[sgg]) {
@@ -738,6 +811,7 @@ async function showSggOn(sido, m, sgg) {
   drawMap(m, 'sgg', scale, {}, () => {});
   mark(sgg);
   $('offmap').innerHTML = '';
+  if (MODE === 'dj') { await djSggBody(sido, sgg); return; }
   const notices = await loadPanel(sido, sgg);
   const cnt = drawMarkers(m, notices || []);
   await showEmd(sido, sgg);
@@ -890,6 +964,485 @@ function notice(n) {
     </div></div>`;
 }
 
+/* ── 대장아파트 ─────────────────────────── */
+/* 최근 12개월 매매 실거래로 지역 평균 시세와 대장 단지를 보여준다.
+   자료는 etl_daejang.py 가 만든 daejang/*.json 이다. */
+const PCOLS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
+
+async function ensureDj() {
+  if (!DJ) DJ = await grab('djindex');
+  return DJ;
+}
+async function djRegion(sido) {
+  return cache.dj[sido] || (cache.dj[sido] = await grab('dj', sido));
+}
+
+/* 3.3㎡당 가격(만원) -> '1억 2,300만' */
+function fmtPpy(v) {
+  if (v == null) return '–';
+  v = Math.round(v / 10) * 10;
+  if (v >= 10000) {
+    const e = Math.floor(v / 10000), r = Math.round((v % 10000) / 100) * 100;
+    return r ? `${e}억 ${r.toLocaleString('ko-KR')}만` : `${e}억`;
+  }
+  return `${v.toLocaleString('ko-KR')}만`;
+}
+/* 거래금액(만원) -> '23.4억' */
+function fmtWon(v) {
+  if (v == null) return '–';
+  if (v >= 10000) {
+    const x = v / 10000;
+    return `${x >= 100 ? x.toFixed(0) : x.toFixed(x >= 10 ? 1 : 2).replace(/0$/, '').replace(/\.$/, '')}억`;
+  }
+  return `${v.toLocaleString('ko-KR')}만`;
+}
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g,
+  (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+function djMissing(e) {
+  $('panel').innerHTML = `<p class="empty">대장아파트 자료가 아직 없습니다.
+    저장소에서 <code>python etl_daejang.py</code> 를 실행하면 만들어집니다.
+    (${esc(e && e.message)})</p>`;
+}
+
+function djFigs(figs) {
+  return `<div class="figs">` + figs.map(([k, v, u, c, note]) => `<div class="fig ${c}">
+    <div class="k">${k}</div>
+    <div class="v num">${v}${u ? `<span class="u">${u}</span>` : ''}</div>
+    ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') + `</div>`;
+}
+
+async function showNationalDj() {
+  try { await ensureDj(); } catch (e) {
+    $('crumb').innerHTML = '<b>전국</b>';
+    $('mapbox').innerHTML = ''; $('legend').innerHTML = ''; $('offmap').innerHTML = '';
+    djMissing(e); return;
+  }
+  const stats = {};
+  for (const [s, v] of Object.entries(DJ.sidoSummary))
+    stats[s] = {v: v.avg, label: `평균 시세 3.3㎡당 ${fmtPpy(v.avg)}`};
+  const scale = makeScale(Object.values(stats).map((x) => x.v), PCOLS);
+  $('crumb').innerHTML = '<b>전국</b><span>시·도를 선택하세요</span>';
+  $('offmap').innerHTML = '';
+  drawMap(NAT, 'nat', scale, stats, showSido);
+  const M = DJ.meta;
+  const rows = Object.entries(DJ.sidoSummary).sort((a, b) => b[1].avg - a[1].avg);
+  const tot = rows.reduce((a, [, v]) => a + v.n, 0);
+  const avg = Math.round(rows.reduce((a, [, v]) => a + v.avg * v.n, 0) / Math.max(tot, 1));
+  const best = rows.map(([s, v]) => ({s, ...(v.lead || {})}))
+    .filter((x) => x.ppy).sort((a, b) => b.ppy - a.ppy)[0];
+  $('panel').innerHTML =
+    `<h2 class="place">전국</h2>
+     <div class="place-sub">지역별 평균 매매 시세와 대장아파트</div>` +
+    djFigs([
+      ['평균 시세', fmtPpy(avg), '', '', '전용 3.3㎡당 · 거래 가중'],
+      ['매매 거래', fmt(tot), '건', '', `${M.from} ~ ${M.to}`],
+      ['시세 1위 시·도', rows[0] ? rows[0][0] : '–', '', 'ochre',
+        rows[0] ? fmtPpy(rows[0][1].avg) : ''],
+      ['최고가 대장', best ? esc(best.name) : '–', '', 'ochre',
+        best ? `${best.s} ${esc(best.sgg)} · ${fmtPpy(best.ppy)}` : ''],
+    ]) +
+    `<h3>시·도별 <span>평균 시세 높은 순</span></h3>
+     <div class="tw"><table><thead><tr>
+       <th>시·도</th><th>평균 시세</th><th>거래</th><th>시·도 내 최고가 대장</th>
+       <th>대장 시세</th></tr></thead><tbody>` +
+    rows.map(([s, v]) => `<tr class="pick" data-s="${s}">
+       <td><b>${sidoFull(s)}</b></td>
+       <td class="num">${fmtPpy(v.avg)}</td>
+       <td class="num">${fmt(v.n)}</td>
+       <td class="l">${v.lead ? `${esc(v.lead.name)} <span style="color:var(--muted)">${esc(v.lead.sgg)}</span>` : '–'}</td>
+       <td class="num">${v.lead ? fmtPpy(v.lead.ppy) : '–'}</td></tr>`).join('') +
+    `</tbody></table></div>` + djFoot();
+  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
+    tr.onclick = () => showSido(tr.dataset.s));
+}
+
+async function showSidoDj(sido, m) {
+  try { await ensureDj(); } catch (e) { djMissing(e); return; }
+  const stats = {};
+  for (const [k, v] of Object.entries(DJ.summary)) {
+    const [s, g] = k.split('|');
+    if (s === sido) stats[g] = {v: v.avg, n: v.cand,
+      label: `평균 시세 3.3㎡당 ${fmtPpy(v.avg)}${v.lead ? ` 대장 ${v.lead}` : ''}`};
+  }
+  const scale = makeScale(Object.values(stats).map((x) => x.v), PCOLS);
+  $('crumb').innerHTML =
+    `<button id="back">전국</button><b>${m.name}</b>
+     <span>시·군·구를 선택하세요</span>`;
+  $('back').onclick = showNational;
+  curMap = m;
+  curFull = m.viewBox.split(/[\s,]+/).map(Number);
+  drawMap(m, 'sgg', scale, stats, (g) => showSgg(sido, g));
+  sizeMarkers();
+  $('offmap').innerHTML = (m.offmap || []).map((g) =>
+    `<button data-g="${g}">${g}</button>`).join('');
+  $('offmap').querySelectorAll('button').forEach((b) =>
+    b.onclick = () => showSgg(sido, b.dataset.g));
+
+  const rows = Object.entries(stats).map(([g]) => [g, DJ.summary[`${sido}|${g}`]])
+    .sort((a, b) => b[1].avg - a[1].avg);
+  const tot = rows.reduce((a, [, v]) => a + v.n, 0);
+  const ss = DJ.sidoSummary[sido] || {};
+  $('panel').innerHTML =
+    `<h2 class="place">${sidoFull(sido)}</h2>
+     <div class="place-sub">시·군·구별 평균 시세와 대장아파트 · 최근 12개월 매매 실거래</div>` +
+    djFigs([
+      ['평균 시세', fmtPpy(ss.avg), '', '', '전용 3.3㎡당 · 거래 가중'],
+      ['매매 거래', fmt(tot), '건', '', ''],
+      ['최고가 대장', ss.lead ? esc(ss.lead.name) : '–', '', 'ochre',
+        ss.lead ? `${esc(ss.lead.sgg)} · ${fmtPpy(ss.lead.ppy)}` : ''],
+    ]) +
+    `<h3>시·군·구별 <span>평균 시세 높은 순 · 누르면 상세</span></h3>
+     <div class="tw"><table><thead><tr>
+       <th>시·군·구</th><th>평균 시세</th><th>84㎡ 중위</th><th>거래</th>
+       <th>대장</th><th>대장 시세</th></tr></thead><tbody>` +
+    rows.map(([g, v]) => `<tr class="pick" data-g="${g}">
+       <td><b>${g}</b></td>
+       <td class="num">${fmtPpy(v.avg)}</td>
+       <td class="num">${fmtWon(v.p84)}</td>
+       <td class="num">${fmt(v.n)}</td>
+       <td class="l">${v.lead ? esc(v.lead) : '–'}${v.relaxed ? ' <span class="tag relax">완화</span>' : ''}</td>
+       <td class="num">${v.leadPpy ? fmtPpy(v.leadPpy) : '–'}</td></tr>`).join('') +
+    `</tbody></table></div>` + djFoot();
+  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
+    tr.onclick = () => showSgg(sido, tr.dataset.g));
+  $('legend').innerHTML += `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px"><div class="mk-lg">
+    <span><i style="background:var(--ochre)"></i>시·군·구 대장 위치</span>
+    ${rows.some(([, v]) => v.cand) ? '<span><span class="mk"></span>대장후보(미준공) 있음</span>' : ''}</div>`;
+
+  // 시군구 대장 위치를 점으로 찍는다
+  try {
+    const R = await djRegion(sido);
+    if (view.sido !== sido || view.sgg) return;
+    const items = [];
+    for (const [g, r] of Object.entries(R)) {
+      const L = r.leader;
+      if (L && L.loc) items.push({loc: L.loc, cls: 'lead', k: 1, id: g,
+        title: `${g} 대장 · ${L.name} · ${fmtPpy(L.ppy)}`, go: () => showSgg(sido, g)});
+    }
+    drawDjMarkers(m, items);
+  } catch (e) { /* 위치 없이도 표는 쓸 수 있다 */ }
+}
+
+async function showSggDj(sido, sgg) {
+  if (curMap && curMap.boxes && curMap.boxes[sgg]) setView(padBox(curMap.boxes[sgg]), true);
+  await djSggBody(sido, sgg);
+  $('crumb').innerHTML =
+    `<button id="back">전국</button>
+     <button id="wide">${SIDO_FULL[sido]}</button><b>${sgg}</b>`;
+  $('back').onclick = showNational;
+  $('wide').onclick = () => showSido(sido);
+}
+
+/* 시군구 상세: 패널, 지도 점, 읍면동 경계 */
+async function djSggBody(sido, sgg) {
+  $('panel').innerHTML = '<p class="spin">불러오는 중…</p>';
+  let R;
+  try {
+    await ensureDj();
+    const all = await djRegion(sido);
+    R = all[sgg];
+  } catch (e) { djMissing(e); return; }
+  if (view.sido !== sido || view.sgg !== sgg) return;
+  if (!R) {
+    curPanel = null;
+    $('panel').innerHTML = `<h2 class="place">${sgg}</h2>
+      <div class="place-sub">${sidoFull(sido)}</div>
+      <p class="empty">최근 12개월 이 지역의 아파트 매매 실거래가 없습니다.</p>`;
+    return;
+  }
+  curPanel = {sido, sgg, R, dj: true};
+  renderDjPanel(sido, sgg, R);
+  if (window.matchMedia('(max-width:860px)').matches)
+    $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+
+  const items = [];
+  const L = R.leader;
+  if (L && L.loc) items.push({loc: L.loc, cls: 'lead', k: 1.35, id: 'dj-lead',
+    title: `대장 · ${L.name} · ${fmtPpy(L.ppy)}`});
+  if (R.top && R.top.loc) items.push({loc: R.top.loc, cls: 'top', k: 1, id: 'dj-top',
+    title: `최고가 · ${R.top.name} · ${fmtPpy(R.top.ppy)}`});
+  (R.dongs || []).forEach((d, i) => {
+    const x = d.leader;
+    if (x && x.loc && !(L && x.name === L.name && x.dong === L.dong))
+      items.push({loc: x.loc, cls: 'dl', k: 0.8, id: `dj-d-${i}`,
+        title: `${d.dong} 대장 · ${x.name} · ${fmtPpy(x.ppy)}`});
+  });
+  (R.cand || []).forEach((c, i) => {
+    if (c.loc) items.push({loc: c.loc, cls: 'cand', k: 1.05, id: `dj-c-${i}`,
+      title: `대장후보 · ${c.name}${c.silv ? ' · 분양권 ' + fmtPpy(c.silv.ppy) : ''}`});
+  });
+  drawDjMarkers(curMap, items);
+  await showEmd(sido, sgg);
+  djMarkerLegend(items, R);
+}
+
+function djMarkerLegend(items, R) {
+  const base = $('legend').innerHTML.split('<hr')[0];
+  const has = (c) => items.some((x) => x.cls === c);
+  const parts = [];
+  if (has('lead')) parts.push('<span><i style="background:var(--ochre)"></i>대장</span>');
+  if (has('top')) parts.push('<span><i style="background:var(--muted)"></i>기준 밖 최고가</span>');
+  if (has('dl')) parts.push('<span><i style="background:var(--blue)"></i>법정동 대장</span>');
+  if (has('cand')) parts.push('<span><i style="border:2px solid var(--blue);width:6px;height:6px"></i>대장후보(미준공)</span>');
+  const svg = $('mapbox').querySelector('svg');
+  const emd = svg && svg.querySelector('g.emd');
+  $('legend').innerHTML = base +
+    `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px">
+     ${parts.length ? `<div class="mk-lg">${parts.join('')}</div>` : ''}
+     ${emd && R.dongs ? `<div style="margin-top:6px">가는 선: 행정동 경계 — 누르면 해당
+       법정동만 표에 남깁니다</div>` : ''}
+     ${parts.length ? `<div style="margin-top:5px">위치는 도로명·지번 주소 기준입니다.</div>` : ''}`;
+}
+
+function drawDjMarkers(m, items) {
+  const svg = $('mapbox').querySelector('svg');
+  if (!svg || !m || !m.proj) return 0;
+  const old = svg.querySelector('g.mks');
+  if (old) old.remove();
+  const p = m.proj;
+  const spots = {};
+  for (const it of items) {
+    const x = (it.loc[1] * p.cos - p.sx0) * p.scale;
+    const y = p.h - (it.loc[0] - p.minLat) * p.scale;
+    const key = x.toFixed(0) + ':' + y.toFixed(0);
+    (spots[key] = spots[key] || {x, y, list: []}).list.push(it);
+  }
+  const parts = [], acts = {};
+  let n = 0;
+  for (const s of Object.values(spots)) {
+    s.list.forEach((it, i) => {
+      const pid = 'pk' + (n++);
+      acts[pid] = it;
+      parts.push(`<g class="pin" data-x="${s.x.toFixed(1)}" data-y="${s.y.toFixed(1)}"
+        data-i="${i}" data-n="${s.list.length}" data-pk="${pid}" role="button" tabindex="0">
+        <title>${esc(it.title)}</title>
+        <circle class="hit" r="9" fill="transparent"></circle>
+        <circle class="dot ${it.cls}" data-k="${it.k}" r="4"></circle></g>`);
+    });
+  }
+  if (!n) return 0;
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('class', 'mks');
+  // 대장 점이 맨 위에 오게 순서를 뒤집어 그린다
+  g.innerHTML = parts.reverse().join('');
+  svg.appendChild(g);
+  g.querySelectorAll('g.pin').forEach((el) => {
+    const it = acts[el.dataset.pk];
+    const go = () => it.go ? it.go() : djFocus(it.id);
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+  sizeMarkers();
+  return n;
+}
+
+function djFocus(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1400);
+}
+
+function djTags(c) {
+  const t = [];
+  if (c.brand) t.push(`<span class="tag brand" title="${esc(c.brandCo || '')}">${esc(c.brand)}</span>`);
+  if (c.hi) t.push('<span class="tag hi">하이엔드</span>');
+  return t.join('');
+}
+
+function hhText(c) {
+  if (c.hh) return `${fmt(c.hh)}세대${c.hhSrc === '조사' ? ' <span style="color:var(--muted)">(조사)</span>' : ''}`;
+  if (c.hhSrc === '거래량 대용') return `세대수 미확인 <span style="color:var(--muted)">(연 거래 ${c.n}건)</span>`;
+  return '세대수 미확인';
+}
+
+function leadCard(c, kind, R) {
+  const st = R.stats;
+  const age = c.age != null ? `${c.by}년 준공 (${c.age <= 0 ? '신축' : c.age + '년차'})` : '';
+  const where = [c.gu, c.dong, c.jibun].filter(Boolean).join(' ') +
+    (c.road ? ` · ${esc(c.road)}` : '');
+  const tags = djTags(c) +
+    (kind === 'lead' && c.tier > 0 ? `<span class="tag relax">완화 기준: ${esc(c.tierText)}</span>` : '') +
+    (kind === 'lead' && c.tier === 0 ? `<span class="tag">${esc(c.tierText)}</span>` : '');
+  const lead = kind === 'lead' && c.lead
+    ? `<dt>위상</dt><dd>이 지역 ${fmt(c.of)}개 단지 중 시세 ${c.rank}위 · 평균의
+        <b class="num">${c.lead.toFixed(2)}배</b></dd>` : '';
+  return `<div class="lead${kind === 'top' ? ' alt' : ''}" id="${kind === 'top' ? 'dj-top' : 'dj-lead'}">
+    <div class="nt-hd"><span class="nm">${esc(c.name)}</span></div>
+    <div class="tags">${tags}</div>
+    <dl class="kv">
+      <dt>시세</dt><dd><span class="big num">${fmtPpy(c.ppy)}</span>
+        <span style="color:var(--muted)"> 전용 3.3㎡당</span>
+        · 84㎡ <b class="num">${fmtWon(c.p84)}</b>${c.p84est ? ' <span style="color:var(--muted)">(환산)</span>' : ''}</dd>
+      ${lead}
+      <dt>규모</dt><dd>${hhText(c)}${age ? ' · ' + age : ''}${c.builder ? ' · ' + esc(c.builder) : ''}</dd>
+      <dt>위치</dt><dd>${esc(where)}</dd>
+      <dt>거래</dt><dd class="num">최근 12개월 ${c.n}건 · 최근 ${c.last.d} ${fmtWon(c.last.amt)}
+        (${c.last.ar}㎡ ${c.last.fl ?? '–'}층) · 최고 ${fmtWon(c.max.amt)} (${c.max.ar}㎡)</dd>
+    </dl></div>`;
+}
+
+function renderDjPanel(sido, sgg, R, dong) {
+  const M = DJ.meta, st = R.stats, L = R.leader;
+  let h = `<h2 class="place">${sgg}</h2>
+    <div class="place-sub">${sidoFull(sido)} · 최근 12개월 매매 실거래 ${fmt(st.n)}건</div>` +
+    djFigs([
+      ['평균 시세', fmtPpy(st.avg), '', '', '전용 3.3㎡당 · 거래 평균'],
+      ['84㎡ 중위 거래가', fmtWon(st.p84), '', '', st.n84 ? `${fmt(st.n84)}건 기준` : ''],
+      ['매매 거래', fmt(st.n), '건', '', `${M.from} ~ ${M.to}`],
+      ['대장 시세', L ? fmtPpy(L.ppy) : '–', '', 'ochre', L ? esc(L.name) : '기준 충족 단지 없음'],
+      ['평균 대비', L && L.lead ? L.lead.toFixed(2) : '–', L ? '배' : '', 'ochre', ''],
+      ['대장 기준', L ? (L.tier ? '완화' : '정규') : '–', '', '',
+        L ? esc(L.tierText) : esc((R.tiers || [])[0] || '')],
+    ]);
+
+  h += `<h3>대장아파트 <span>${esc((R.tiers || [])[0])} 중 3.3㎡당 시세 1위</span></h3>`;
+  h += L ? leadCard(L, 'lead', R)
+    : `<p class="empty" style="margin-top:14px">기준을 끝까지 완화해도(${esc((R.tiers || []).slice(-1)[0])})
+        해당하는 단지가 없습니다.</p>`;
+  if (R.top) {
+    h += `<p style="margin:14px 0 0;font-size:13px;color:var(--muted)">기준과 상관없이 3.3㎡당
+      시세가 가장 높은 단지는 따로 있습니다. 재건축을 앞둔 구축이나 소단지인 경우가 많습니다.</p>`;
+    h += leadCard(R.top, 'top', R);
+  }
+
+  const cand = R.cand || [];
+  if (cand.length) {
+    const main = cand.filter((c) => !c.auto), extra = cand.filter((c) => c.auto);
+    h += `<h3>대장후보 <span>미준공·입주 초기 프리미엄 대단지</span></h3>`;
+    h += main.map((c, i) => candCard(c, i, L)).join('');
+    if (extra.length) h += `<details class="yr"><summary><b>그 밖의 분양권 거래 브랜드 단지</b>
+        <span class="num">${extra.length}곳</span><i>세대수 미확인</i></summary>
+        ${extra.map((c, i) => candCard(c, main.length + i, L)).join('')}</details>`;
+  }
+
+  const nt = R.newTop || [];
+  if (nt.length) {
+    h += `<h3>신축 시세 상위 <span>준공 10년 이내 · 3.3㎡당 시세 순</span></h3>
+      <div class="tw"><table><thead><tr><th>단지</th><th>법정동</th><th>준공</th>
+      <th>세대</th><th>3.3㎡당</th><th>84㎡</th><th>거래</th></tr></thead><tbody>` +
+      nt.map((c) => `<tr><td class="l"><b>${esc(c.name)}</b> ${djTags(c)}</td>
+        <td>${esc(c.dong)}</td><td class="num">${c.by ?? '–'}</td>
+        <td class="num">${c.hh ? fmt(c.hh) : '–'}</td>
+        <td class="num">${fmtPpy(c.ppy)}</td>
+        <td class="num">${fmtWon(c.p84)}${c.p84est ? '*' : ''}</td>
+        <td class="num">${c.n}</td></tr>`).join('') + `</tbody></table></div>`;
+  }
+
+  if (R.dongs && R.dongs.length) {
+    const alias = dong ? dongAliases(dong) : null;
+    const list = alias ? R.dongs.filter((d) => alias.includes(d.dong)) : R.dongs;
+    h += `<h3>법정동별 대장 <span>평균 시세 높은 순</span></h3>`;
+    if (dong) h += `<div class="dongbar" style="margin:12px 0 0"><b>${esc(dong)}</b>
+        <span>행정동 → 법정동 ${list.length ? list.map((d) => esc(d.dong)).join('·') : '대응 없음'}</span>
+        <button id="alldong">${sgg} 전체</button></div>`;
+    h += `<div class="tw"><table><thead><tr><th>법정동</th><th>평균 시세</th><th>거래</th>
+      <th>대장</th><th>세대</th><th>준공</th><th>대장 시세</th></tr></thead><tbody>` +
+      (list.length ? list.map((d) => {
+        const x = d.leader, i = R.dongs.indexOf(d);
+        return `<tr class="dj-row" id="dj-d-${i}"><td><b>${esc(d.dong)}</b></td>
+          <td class="num">${fmtPpy(d.stats.avg)}</td><td class="num">${fmt(d.stats.n)}</td>
+          <td class="l">${x ? `${esc(x.name)} ${djTags(x)}${x.tier ? ' <span class="tag relax" title="' + esc(x.tierText) + '">완화</span>' : ''}` : '<span style="color:var(--muted)">기준 충족 없음</span>'}</td>
+          <td class="num">${x && x.hh ? fmt(x.hh) : '–'}</td>
+          <td class="num">${x ? x.by : '–'}</td>
+          <td class="num">${x ? fmtPpy(x.ppy) : '–'}</td></tr>`;
+      }).join('') : `<tr><td colspan="7" class="l" style="color:var(--muted)">
+          고른 행정동에 대응하는 법정동 거래가 없습니다.</td></tr>`) +
+      `</tbody></table></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:6px">법정동 대장 기준:
+      ${esc(R.dongs[0] && R.dongs[0].tiers ? R.dongs[0].tiers.join(' → ') : '')} 순으로 완화.</p>`;
+  }
+
+  h += djFoot(true);
+  $('panel').innerHTML = h;
+  const back = $('alldong');
+  if (back) back.onclick = () => pickDong(dong);
+}
+
+function candCard(c, i, L) {
+  const s = c.silv;
+  let cmp = '';
+  if (s && L && L.ppy) {
+    const r = s.ppy / L.ppy;
+    cmp = `<span class="cmp${r >= 1 ? ' up' : ''}">현 대장의 ${Math.round(r * 100)}%</span>`;
+  }
+  const mv = c.moveIn ? `${c.moveIn.slice(0, 4)}년 ${+c.moveIn.slice(5, 7)}월 입주${c.status === '입주중' ? ' 시작' : ' 예정'}` : '';
+  return `<div class="cand" id="dj-c-${i}">
+    <div class="nt-hd"><span class="nm">${esc(c.name)}</span></div>
+    <div class="tags" style="margin-top:4px"><span class="tag st">${esc(c.status || '')}</span>${djTags(c)}</div>
+    <div class="nt-meta">${[esc(c.gu) + ' ' + esc(c.dong), c.hh ? fmt(c.hh) + '세대' : '세대수 미확인',
+      c.builder ? esc(c.builder) : '', mv].filter(Boolean).join(' · ')}${c.note ? ' · ' + esc(c.note) : ''}</div>
+    <div class="row">
+      ${s ? `<span>분양권·입주권 <b class="num">${fmtPpy(s.ppy)}</b> /3.3㎡ · 84㎡ <b class="num">${fmtWon(s.p84)}</b>${s.p84est ? '(환산)' : ''}
+        <span style="color:var(--muted)">(${s.n}건, 최근 ${s.last.d})</span> ${cmp}</span>`
+        : '<span style="color:var(--muted)">최근 12개월 분양권·입주권 거래 없음</span>'}
+      ${c.sale84 ? `<span>84㎡ 분양가 <b class="num">${fmtWon(c.sale84)}</b>
+        <span style="color:var(--muted)">(${c.saleDate} 공고, 최고가)</span></span>` : ''}
+      ${c.srcUrl ? `<a href="${esc(c.srcUrl)}" target="_blank" rel="noopener">세대수 출처</a>` : ''}
+    </div></div>`;
+}
+
+function djFoot(detail) {
+  const M = DJ.meta;
+  const warn = [];
+  if (M.kapt && M.kapt !== 'ok') warn.push(`K-apt 세대수 조회를 쓰지 못해(${esc(M.kapt)})
+    거래량을 대단지 대용 지표로 썼습니다.`);
+  if (M.partial) warn.push(`실거래 수집이 중간에 멈춰 일부 지역이 빠졌을 수 있습니다 (${esc(M.partial)}).`);
+  return `<div class="foot">
+    시세는 국토교통부 아파트 매매 실거래가(공공데이터포털) ${M.from} ~ ${M.to} 계약분이며
+    해제 거래와 직거래는 뺐습니다. 3.3㎡당 가격은 전용면적 기준으로, 공급면적 기준인
+    시중 평당가보다 높게 나옵니다. 단지 시세는 최근 6개월 거래가 3건 이상이면 그
+    기간의, 아니면 12개월 전체의 중위값입니다. 84㎡는 전용 80~90㎡ 거래의 중위
+    거래가이며, 해당 평형 거래가 없으면 3.3㎡당 시세로 환산했습니다(*).
+    ${detail ? `대장은 연식·세대수 기준을 통과한 단지 중 3.3㎡당 시세 1위이고, 브랜드는
+    표시만 합니다. 기준을 통과한 단지가 없으면 단계적으로 완화하고 '완화'로 표시합니다.
+    세대수는 공동주택관리정보시스템(K-apt)과, 신축·미준공 단지는 언론 보도를 확인한
+    조사값입니다. 대장후보 시세는 분양권·입주권 실거래(국토교통부)입니다.` : ''}
+    ${warn.join(' ')}
+    자료 생성 ${M.generated}.</div>`;
+}
+
+/* ── 보기 전환 ──────────────────────────── */
+function setMode(m, quiet) {
+  MODE = m;
+  try { localStorage.setItem('mode', m); } catch (e) { /* 저장 못 해도 그만 */ }
+  $('m-cy').classList.toggle('on', m === 'cy');
+  $('m-dj').classList.toggle('on', m === 'dj');
+  $('m-cy').setAttribute('aria-selected', m === 'cy');
+  $('m-dj').setAttribute('aria-selected', m === 'dj');
+  $('ttl').textContent = m === 'dj' ? '지역별 대장아파트' : '시군구 청약·미분양 조회';
+  document.title = $('ttl').textContent;
+  srcLine();
+  if (quiet) return;
+  const v = {...view};
+  (async () => {
+    if (!v.sido) return showNational();
+    await showSido(v.sido);
+    if (v.sgg && view.sgg !== v.sgg) await showSgg(v.sido, v.sgg);
+  })();
+}
+
+function srcLine() {
+  if (MODE === 'dj') {
+    $('src').innerHTML = DJ
+      ? `매매 실거래 국토교통부 · ${DJ.meta.from} ~ ${DJ.meta.to}
+         <br>거래 ${fmt(DJ.meta.trades)}건 · 3.3㎡당은 전용면적 기준`
+      : '매매 실거래 국토교통부';
+    if (!DJ) ensureDj().then(srcLine).catch(() => {});
+    return;
+  }
+  if (!IDX) return;
+  $('src').innerHTML =
+    `청약 한국부동산원 청약홈 · 미분양 국토교통부 ${ym(IDX.meta.unsoldBaseYm)} 기준
+     <br>최근 3년 아파트 공고 ${fmt(IDX.meta.noticeCount)}건`;
+}
+$('m-cy').onclick = () => MODE !== 'cy' && setMode('cy');
+$('m-dj').onclick = () => MODE !== 'dj' && setMode('dj');
+
 const SLUG = {서울:'seoul',부산:'busan',대구:'daegu',인천:'incheon',
   대전:'daejeon',울산:'ulsan',세종:'sejong',경기:'gyeonggi',강원:'gangwon',
   충북:'chungbuk',충남:'chungnam',전북:'jeonbuk',전남광주:'jngj',
@@ -905,9 +1458,10 @@ const ym = (s) => s ? `${s.slice(0, 4)}년 ${+s.slice(4)}월` : '';
 (async function () {
   try {
     IDX = await grab('index');
-    $('src').innerHTML =
-      `청약 한국부동산원 청약홈 · 미분양 국토교통부 ${ym(IDX.meta.unsoldBaseYm)} 기준
-       <br>최근 3년 아파트 공고 ${fmt(IDX.meta.noticeCount)}건`;
+    let saved = 'cy';
+    try { saved = localStorage.getItem('mode') || 'cy'; } catch (e) { /* 없으면 기본 */ }
+    if (location.hash === '#daejang') saved = 'dj';
+    setMode(saved === 'dj' ? 'dj' : 'cy', true);
     await showNational();
   } catch (e) {
     $('panel').innerHTML = `<p class="empty">자료를 불러오지 못했습니다.
