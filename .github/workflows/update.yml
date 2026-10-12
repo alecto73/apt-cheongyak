@@ -76,4 +76,6 @@ jobs:
           done
           git diff --staged --quiet && echo "변경 없음" && exit 0
           git commit -m "자료 갱신 $(date -u +%Y-%m-%d)"
+          # 실행 중에 다른 커밋이 올라왔을 수 있다 (긴 수집 중 코드 수정 등).
+          git pull --rebase -X theirs origin main || git pull --rebase origin main
           git push
