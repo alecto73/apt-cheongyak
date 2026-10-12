@@ -188,6 +188,9 @@ def parse_api(text):
     return items, int(total) if total and total.isdigit() else len(items)
 
 
+_CALL_LOCK = __import__("threading").Lock()
+
+
 class Client:
     """호출 수를 세고, 일시 오류는 다시 시도하는 얇은 래퍼."""
 
@@ -210,7 +213,8 @@ class Client:
         url = f"{API}/{svc}/{op}?{q}"
         last = None
         for i in range(tries):
-            self.calls += 1
+            with _CALL_LOCK:
+                self.calls += 1
             try:
                 req = urllib.request.Request(url, headers={"Accept": "*/*"})
                 with urllib.request.urlopen(req, timeout=60) as r:
@@ -257,49 +261,80 @@ def fetch_month(cli, spec, code, ym):
         page += 1
 
 
+WORKERS = int(os.environ.get("DAEJANG_WORKERS", "6"))   # 동시 호출 수
+
+
 def collect(cli, kind, codes, months, offline):
-    """raw/rtms/{kind}/{ym}/{code}.json 캐시를 채우고 전체를 돌려준다."""
-    spec = TRADE if kind == "trade" else SILV
-    fallback = TRADE_FALLBACK if kind == "trade" else None
-    out, fetched, failed, streak = [], 0, 0, 0
-    stop_reason = None
+    """raw/rtms/{kind}/{ym}/{code}.json 캐시를 채우고 전체를 돌려준다.
+
+    한 번에 한 건씩 부르면 전국 13개월(약 3,700회)에 1시간 반이 걸린다.
+    지역코드는 서로 독립이라 여러 개를 동시에 부른다. 첫 호출만은 혼자
+    해서, 상세 서비스가 막혔을 때 대체 서비스로 바꿀지를 먼저 정한다.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    st = {"spec": TRADE if kind == "trade" else SILV,
+          "fallback": TRADE_FALLBACK if kind == "trade" else None,
+          "fetched": 0, "failed": 0, "streak": 0, "stop": None}
+    lock = __import__("threading").Lock()
+
+    def one(code, ym, path):
+        if st["stop"]:
+            return
+        try:
+            try:
+                rows = fetch_month(cli, st["spec"], code, ym)
+            except ApiError as e0:
+                with lock:
+                    can = st["fallback"] and e0.fatal and st["fetched"] == 0
+                    if can:
+                        print(f"  [{kind}] {st['spec'][0]} 사용 불가({e0.code}) → "
+                              f"{st['fallback'][0]} 로 다시 시도", flush=True)
+                        st["spec"], st["fallback"] = st["fallback"], None
+                if not can:
+                    raise
+                rows = fetch_month(cli, st["spec"], code, ym)
+                print(f"  [{kind}] {st['spec'][0]} 로 수집합니다", flush=True)
+            jdump(rows, path)
+            with lock:
+                st["fetched"] += 1
+                st["streak"] = 0
+        except ApiError as e:
+            with lock:
+                st["failed"] += 1
+                st["streak"] += 1
+                if st["streak"] >= 20:   # 네트워크가 통째로 안 될 때 시간 낭비를 막는다
+                    e = ApiError("STREAK", f"연속 {st['streak']}회 실패, 마지막: {e}")
+                if e.fatal or e.quota or e.code in ("BUDGET", "STREAK"):
+                    if not st["stop"]:
+                        st["stop"] = e
+                        print(f"  [{kind}] 수집 중단: {scrub(e)}", flush=True)
+                else:
+                    print(f"  [{kind}] {code} {ym} 실패: {scrub(e)}", flush=True)
+
+    out = []
     for mi, ym in enumerate(months):
+        todo = []
         for code in codes:
             path = os.path.join(RAW, kind, ym, f"{code}.json")
             fresh = os.path.exists(path) and (mi >= REFRESH_MONTHS or offline)
-            if not fresh and not offline and not stop_reason:
-                try:
-                    try:
-                        rows = fetch_month(cli, spec, code, ym)
-                    except ApiError as e0:
-                        if not (fallback and e0.fatal and fetched == 0):
-                            raise
-                        print(f"  [{kind}] {spec[0]} 사용 불가({e0.code}) → "
-                              f"{fallback[0]} 로 다시 시도", flush=True)
-                        spec, fallback = fallback, None
-                        rows = fetch_month(cli, spec, code, ym)
-                        print(f"  [{kind}] {spec[0]} 로 수집합니다", flush=True)
-                    jdump(rows, path)
-                    fetched += 1
-                    streak = 0
-                    time.sleep(0.05)
-                except ApiError as e:
-                    failed += 1
-                    streak += 1
-                    if streak >= 20:          # 네트워크가 통째로 안 될 때 시간 낭비를 막는다
-                        e = ApiError("STREAK", f"연속 {streak}회 실패, 마지막: {e}")
-                    if e.fatal or e.quota or e.code in ("BUDGET", "STREAK"):
-                        stop_reason = e
-                        print(f"  [{kind}] 수집 중단: {scrub(e)}", flush=True)
-                    else:
-                        print(f"  [{kind}] {code} {ym} 실패: {scrub(e)}", flush=True)
+            if not fresh and not offline:
+                todo.append((code, ym, path))
+        if todo and not st["stop"]:
+            if st["fetched"] == 0:
+                one(*todo[0])            # 서비스 확인용 첫 호출
+                todo = todo[1:]
+            if todo and not st["stop"]:
+                with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+                    list(ex.map(lambda a: one(*a), todo))
+        for code in codes:
+            path = os.path.join(RAW, kind, ym, f"{code}.json")
             if os.path.exists(path):
                 for r in jload(path, []):
                     r["_code"] = code
                     out.append(r)
-        print(f"  [{kind}] {ym} 누적 {len(out):,}건 (새로 받음 {fetched}, 실패 {failed})",
-              flush=True)
-    return out, stop_reason
+        print(f"  [{kind}] {ym} 누적 {len(out):,}건 (새로 받음 {st['fetched']}, "
+              f"실패 {st['failed']})", flush=True)
+    return out, st["stop"]
 
 
 # ------------------------------------------------------------------ 정규화

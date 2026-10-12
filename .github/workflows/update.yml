@@ -46,8 +46,10 @@ jobs:
         run: python etl.py --offline
 
       # 대장아파트: 실거래 원자료(raw/rtms)는 커밋하지 않고 Actions 캐시에 둔다.
+      # 복원과 저장을 나눈다. actions/cache 하나로 쓰면 작업이 실패로 끝날 때
+      # 저장 단계가 건너뛰어져, 오래 받은 원자료가 통째로 사라진다.
       - name: 실거래 캐시 복원
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: raw/rtms
           key: rtms-${{ github.run_id }}
@@ -62,6 +64,13 @@ jobs:
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
         run: python etl_daejang.py
+
+      - name: 실거래 캐시 저장
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: raw/rtms
+          key: rtms-${{ github.run_id }}
 
       - name: 단일 파일 판본
         run: python build_standalone.py
