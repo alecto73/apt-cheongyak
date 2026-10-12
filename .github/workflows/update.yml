@@ -32,6 +32,8 @@ jobs:
       - run: pip install shapely
 
       - name: 청약·미분양 수집
+        # 외부 서버(청약홈·KOSIS)가 잠시 응답하지 않아도 대장아파트 집계는 따로 돈다.
+        continue-on-error: true
         env:
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
           KOSIS_KEY: ${{ secrets.KOSIS_KEY }}
@@ -40,9 +42,11 @@ jobs:
       # 새로 올라온 공고의 우편번호만 좌표를 구한다.
       # 캐시에 있는 건 건너뛰므로 보통 몇 초면 끝난다.
       - name: 단지 좌표 보충
+        continue-on-error: true
         run: python geocode.py
 
       - name: 좌표 반영 후 재집계
+        continue-on-error: true
         run: python etl.py --offline
 
       # 대장아파트: 실거래 원자료(raw/rtms)는 커밋하지 않고 Actions 캐시에 둔다.
