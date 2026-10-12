@@ -339,8 +339,10 @@ def collect(cli, kind, codes, months, offline):
 
 # ------------------------------------------------------------------ 정규화
 def to_int(v):
+    """'2,990', '2990', '2990.0' 모두 정수로. K-apt 는 숫자를 소수점 붙여 줄 때가 있다."""
     try:
-        return int(str(v).replace(",", "").strip())
+        t = str(v).replace(",", "").strip()
+        return int(float(t)) if t else None
     except (TypeError, ValueError):
         return None
 
@@ -594,8 +596,8 @@ class Kapt:
 
     def basic(self, kcode):
         hit = self.cache["basic"].get(kcode)
-        if hit is not None:
-            return hit
+        if hit is not None and (hit.get("hh") or hit.get("_tries", 0) >= 2):
+            return hit                    # 세대수가 비어 있던 건 한 번 더 묻는다
         if self.offline or self.unavailable:
             return None
         try:
@@ -609,6 +611,7 @@ class Kapt:
             return None
         it = items[0] if items else {}
         rec = {
+            "_tries": (hit or {}).get("_tries", 0) + 1,
             "name": it.get("kaptName", ""),
             "hh": to_int(it.get("kaptdaCnt") or it.get("hoCnt")),
             "use": (it.get("kaptUsedate") or "")[:8],
