@@ -44,6 +44,10 @@ SEED = os.path.join(ROOT, "daejang_seed.json")
 
 API = "https://apis.data.go.kr/1613000"
 TRADE = ("RTMSDataSvcAptTradeDev", "getRTMSDataSvcAptTradeDev")
+# '상세'가 없는 매매 실거래가 서비스. 이름이 비슷해 이쪽만 신청한 경우가 있어
+# 상세 서비스가 키 오류를 내면 이 주소로 다시 시도한다. 도로명·동 정보가
+# 빠질 수 있어 상세 서비스를 우선한다.
+TRADE_FALLBACK = ("RTMSDataSvcAptTrade", "getRTMSDataSvcAptTrade")
 SILV = ("RTMSDataSvcSilvTrade", "getRTMSDataSvcSilvTrade")
 # K-apt 서비스는 버전이 자주 바뀐다. 최신부터 차례로 시도한다.
 KAPT_LIST = [("AptListService4", "getLegaldongAptList4"),
@@ -256,6 +260,7 @@ def fetch_month(cli, spec, code, ym):
 def collect(cli, kind, codes, months, offline):
     """raw/rtms/{kind}/{ym}/{code}.json 캐시를 채우고 전체를 돌려준다."""
     spec = TRADE if kind == "trade" else SILV
+    fallback = TRADE_FALLBACK if kind == "trade" else None
     out, fetched, failed, streak = [], 0, 0, 0
     stop_reason = None
     for mi, ym in enumerate(months):
@@ -264,7 +269,16 @@ def collect(cli, kind, codes, months, offline):
             fresh = os.path.exists(path) and (mi >= REFRESH_MONTHS or offline)
             if not fresh and not offline and not stop_reason:
                 try:
-                    rows = fetch_month(cli, spec, code, ym)
+                    try:
+                        rows = fetch_month(cli, spec, code, ym)
+                    except ApiError as e0:
+                        if not (fallback and e0.fatal and fetched == 0):
+                            raise
+                        print(f"  [{kind}] {spec[0]} 사용 불가({e0.code}) → "
+                              f"{fallback[0]} 로 다시 시도", flush=True)
+                        spec, fallback = fallback, None
+                        rows = fetch_month(cli, spec, code, ym)
+                        print(f"  [{kind}] {spec[0]} 로 수집합니다", flush=True)
                     jdump(rows, path)
                     fetched += 1
                     streak = 0
@@ -927,6 +941,11 @@ def main(argv=None, today=None, client=None):
     kapt = Kapt(cli, offline)
     hhs = Households(kapt, seed)
 
+    # 상세가 아닌 서비스에는 법정동 코드가 없을 수 있다. 그러면 K-apt 로
+    # 세대수를 붙일 수 없어 거래량을 대단지 대용으로 쓴다.
+    no_umd = bool(trades) and sum(1 for t in trades if t["umdCd"]) < len(trades) * 0.5
+    if no_umd:
+        print("  법정동 코드가 없는 응답이라 세대수 대신 거래량을 대용으로 씁니다", flush=True)
     by_sgg_t = collections.defaultdict(list)
     for t in trades:
         by_sgg_t[(t["sido"], t["sgg"])].append(t)
@@ -937,7 +956,7 @@ def main(argv=None, today=None, client=None):
     regions = {}
     for (sido, sgg), ts in sorted(by_sgg_t.items()):
         # K-apt 를 못 쓰면(미신청·한도) 거래량을 대단지 대용 지표로 쓴다.
-        proxy = bool(kapt.unavailable)
+        proxy = bool(kapt.unavailable) or no_umd
         r = decide(by_sgg_c[(sido, sgg)], ts, sido, sgg, "sgg", hhs, proxy, today, 3)
         if not r:
             continue
