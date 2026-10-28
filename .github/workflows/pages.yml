@@ -1,0 +1,45 @@
+# web/ 폴더를 GitHub Pages 로 배포한다.
+#
+# 쓰기 전에 한 번: 저장소 Settings > Pages > Build and deployment >
+# Source 를 "GitHub Actions" 로 바꾼다. 브랜치 방식으로 두면 이 워크플로가
+# 돌아도 사이트가 바뀌지 않는다.
+#
+# 주소는 https://alecto73.github.io/apt-cheongyak/ 가 된다.
+name: 페이지 배포
+
+on:
+  # 자료 갱신이 커밋을 밀어 넣을 때도, 손으로 올릴 때도 같이 배포된다.
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 한 번에 하나만. 돌고 있는 배포를 끊으면 사이트가 반쯤 올라간
+# 상태로 남을 수 있어 취소하지 않고 줄을 세운다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/configure-pages@v6
+
+      # 빌드 과정이 없다. web/ 가 그대로 사이트다.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
