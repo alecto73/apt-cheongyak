@@ -76,14 +76,11 @@ jobs:
           path: raw/rtms
           key: rtms-${{ github.run_id }}
 
-      - name: 단일 파일 판본
-        run: python build_standalone.py
-
       - name: 변경분 커밋
         run: |
           git config user.name  "github-actions"
           git config user.email "actions@github.com"
-          git add web/index.json web/region web/geo-cache.json web/standalone.html
+          git add web/index.json web/region web/geo-cache.json
           for f in web/daejang web/daejang-geo.json kapt-cache.json; do
             [ -e "$f" ] && git add "$f"
           done
