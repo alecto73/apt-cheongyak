@@ -4,14 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eeefea">
-<title>시군구 청약·미분양 조회</title>
+<title>청약·미분양·대장아파트 지도</title>
 <style>
 :root{
   --paper:#eeefea; --card:#f7f7f4; --ink:#191c18; --rule:#d3d5cc;
   --muted:#6e7269; --blue:#2c4a7c; --ochre:#8a5a12; --warn:#8c3a2b;
-  --u0:#e6e7e0; --u1:#e2dcc4; --u2:#d8c79a; --u3:#c9a962; --u4:#a87a2a;
-  --p1:#dfe3e8; --p2:#b9c4d3; --p3:#8597b2; --p4:#4f6788;
-  --pad:clamp(16px,3vw,32px);
+  --gold:#b8860b;
+  --pad:clamp(14px,2.4vw,28px);
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -19,109 +18,94 @@ body{
   background:var(--paper); color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",
     "Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
-  font-size:15px; line-height:1.55;
-  -webkit-text-size-adjust:100%;
+  font-size:15px; line-height:1.55; -webkit-text-size-adjust:100%;
 }
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 a{color:var(--blue);text-decoration:none;border-bottom:1px solid rgba(44,74,124,.35)}
 a:hover{border-bottom-color:var(--blue)}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-svg.map path:focus{outline:none}
-svg.map path:focus-visible{outline:none;stroke:var(--blue);stroke-width:3.5}
 .num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 
 /* ── 머리말 ─────────────────────────────── */
-header{
-  display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;
-  padding:18px var(--pad) 14px;border-bottom:1px solid var(--rule);
-}
+header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;
+  padding:14px var(--pad) 12px;border-bottom:1px solid var(--rule)}
 header h1{margin:0;font-size:17px;font-weight:650;letter-spacing:-.02em}
-header .src{margin-left:auto;font-size:12.5px;color:var(--muted);line-height:1.4}
+header .src{margin-left:auto;font-size:12px;color:var(--muted);line-height:1.4;
+  text-align:right}
+
+/* 레이어 토글 */
+.layers{display:flex;gap:7px;flex-wrap:wrap}
+.layers button{display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--rule);border-radius:999px;padding:4px 12px 4px 9px;
+  font-size:13px;color:var(--muted);background:var(--card)}
+.layers button .sw{width:11px;height:11px;border-radius:50%;flex:0 0 auto;
+  background:var(--muted);opacity:.35}
+.layers button.on{color:var(--ink);border-color:var(--ink);font-weight:600}
+.layers button.on .sw{opacity:1}
+.layers button[data-l="cy"].on .sw{background:var(--blue)}
+.layers button[data-l="un"].on .sw{background:var(--warn)}
+.layers button[data-l="dj"].on .sw{background:var(--gold)}
+.layers button .n{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* ── 레이아웃 ───────────────────────────── */
-.wrap{display:grid;grid-template-columns:minmax(340px,42%) 1fr;
-  gap:0;align-items:start}
+.wrap{display:grid;grid-template-columns:minmax(380px,46%) 1fr;align-items:start}
 .left{padding:var(--pad);border-right:1px solid var(--rule);
   position:sticky;top:0;max-height:100vh;overflow:auto}
 .right{padding:var(--pad);min-width:0}
-@media(max-width:860px){
+@media(max-width:900px){
   .wrap{grid-template-columns:1fr}
   .left{position:static;max-height:none;border-right:0;
-    border-bottom:1px solid var(--rule);padding-bottom:18px}
+    border-bottom:1px solid var(--rule)}
 }
 
 /* ── 지도 ───────────────────────────────── */
-.crumb{display:flex;align-items:center;gap:10px;margin-bottom:12px;
-  font-size:13.5px;color:var(--muted)}
+.crumb{display:flex;align-items:center;gap:8px;margin-bottom:10px;
+  font-size:13.5px;color:var(--muted);flex-wrap:wrap}
 .crumb b{color:var(--ink);font-weight:600}
 .crumb button{border:1px solid var(--rule);border-radius:3px;
   padding:3px 9px;font-size:12.5px;background:var(--card)}
 .crumb button:hover{border-color:var(--ink)}
-svg.map{width:100%;height:clamp(340px,64vh,720px);display:block;
-  touch-action:manipulation}
-svg.map path{stroke:var(--paper);stroke-width:1.6;cursor:pointer;
-  transition:fill .12s}
-svg.map path:hover{stroke:var(--ink);stroke-width:2}
-svg.map path.on{stroke:var(--ink);stroke-width:2.6}
-svg.map path.off{opacity:.42}
-svg.map text.off{opacity:.4}
-svg.map g.mks circle.dot{stroke:var(--paper)}
-svg.map g.pin{cursor:pointer}
-svg.map g.pin:hover circle.dot,svg.map g.pin:focus-visible circle.dot{
-  stroke:var(--ink)}
-svg.map g.mks circle.dot.close{fill:var(--blue)}
-svg.map g.mks circle.dot.short{fill:var(--warn)}
-svg.map g.mks circle.dot.none{fill:var(--muted)}
-svg.map g.mks text{font-weight:650;stroke:none;fill:var(--paper);
-  paint-order:normal}
-svg.map text{font-size:15px;fill:var(--ink);text-anchor:middle;
-  pointer-events:none;paint-order:stroke;stroke:var(--paper);
-  stroke-width:3px;font-weight:520}
-svg.map text.dim{fill:var(--muted)}
-svg.map text.on{font-weight:700}
-svg.map rect.mk{fill:var(--blue);pointer-events:none}
+#map{width:100%;height:clamp(380px,66vh,760px);background:var(--card);
+  border:1px solid var(--rule)}
+.maperr{padding:18px;color:var(--muted);font-size:13.5px;line-height:1.7}
 
-/* 읍면동 경계: 시군구를 고르면 그 안쪽에만 얹는다 */
-svg.map g.emd path{fill:transparent;stroke:rgba(25,28,24,.32);
-  stroke-width:1;stroke-linejoin:round;cursor:pointer;transition:fill .12s}
-svg.map g.emd path:hover{fill:rgba(44,74,124,.10);
-  stroke:rgba(25,28,24,.55);stroke-width:1}
-svg.map g.emd path.on{fill:rgba(44,74,124,.16);stroke:var(--blue);
-  stroke-width:2}
-svg.map g.emd text{fill:var(--muted);font-weight:450}
-svg.map g.emd text.hide{display:none}
-/* 읍면동 이름이 나오면 시군구 이름표와 그 옆 공고 표시는 감춘다 */
-svg.map.emdon>text,svg.map.emdon>rect.mk{display:none}
-svg.map g.mks g.pin.dim{opacity:.18}
+/* 경계 위에 얹는 이름표 */
+.plab{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;
+  text-shadow:0 0 3px var(--paper),0 0 3px var(--paper),0 0 3px var(--paper);
+  pointer-events:none;transform:translate(-50%,-50%)}
+.plab.sm{font-size:11px;font-weight:500;color:var(--muted)}
 
-.dongbar{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
-  margin:26px 0 -6px;padding:7px 11px;background:var(--card);
-  border:1px solid var(--rule);border-radius:3px;font-size:13px}
-.dongbar b{font-weight:640}
-.dongbar span{color:var(--muted);font-size:12.5px}
-.dongbar button{margin-left:auto;border:1px solid var(--rule);
-  border-radius:3px;padding:2px 9px;font-size:12.5px}
-.dongbar button:hover{border-color:var(--ink)}
+/* 단지 표시 */
+.pin{width:13px;height:13px;border-radius:50%;border:2px solid var(--paper);
+  box-shadow:0 0 0 .5px rgba(25,28,24,.35);cursor:pointer;
+  transform:translate(-50%,-50%)}
+.pin.cy-close{background:var(--blue)}
+.pin.cy-short{background:var(--warn)}
+.pin.cy-none{background:var(--muted)}
+.pin.un{background:#fff;border-color:var(--warn);border-width:3px;
+  width:14px;height:14px}
+.pin.dj{background:var(--gold);width:14px;height:14px;border-radius:2px;
+  transform:translate(-50%,-50%) rotate(45deg)}
+.pin.dj.cand{background:#fff;border-color:var(--gold);border-width:3px}
+.pin.dim{opacity:.2}
+.pin:hover{box-shadow:0 0 0 2px var(--ink)}
 
-.legend{margin-top:14px;font-size:12.5px;color:var(--muted)}
-.legend .bar{display:flex;margin:6px 0 4px}
-.legend .bar i{flex:1;height:9px}
-.legend .ends{display:flex;justify-content:space-between}
-.legend .mk{display:inline-block;width:7px;height:7px;
-  background:var(--blue);vertical-align:1px;margin-right:5px}
-.offmap{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px}
-.offmap button{border:1px solid var(--rule);border-radius:3px;
-  padding:3px 9px;font-size:12.5px;background:var(--card)}
+.legend{margin-top:12px;font-size:12.5px;color:var(--muted);line-height:1.9}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;
+  vertical-align:0;margin-right:5px;border:1.5px solid var(--paper);
+  box-shadow:0 0 0 .5px rgba(25,28,24,.3)}
+.legend i.un{background:#fff;border-color:var(--warn);border-width:2.5px}
+.legend i.dj{background:var(--gold);border-radius:1px}
+.legend span{margin-right:12px;white-space:nowrap;display:inline-block}
 
 /* ── 결과 ───────────────────────────────── */
 .empty{color:var(--muted);max-width:34em;padding-top:6px}
-h2.place{margin:0 0 2px;font-size:clamp(26px,4vw,38px);
+h2.place{margin:0 0 2px;font-size:clamp(24px,3.6vw,34px);
   font-weight:680;letter-spacing:-.035em;line-height:1.1}
-.place-sub{color:var(--muted);font-size:13.5px;margin-bottom:22px}
-
+.place-sub{color:var(--muted);font-size:13.5px;margin-bottom:20px}
 .figs{display:grid;grid-template-columns:repeat(3,1fr);
   border-top:2px solid var(--ink);border-bottom:1px solid var(--rule)}
-.fig{padding:12px 14px 13px;border-right:1px solid var(--rule)}
+.fig{padding:11px 13px 12px;border-right:1px solid var(--rule)}
 .fig:nth-child(3n),.fig:last-child{border-right:0}
 .fig:nth-child(n+4){border-top:1px solid var(--rule)}
 @media(max-width:520px){
@@ -131,39 +115,40 @@ h2.place{margin:0 0 2px;font-size:clamp(26px,4vw,38px);
   .fig:nth-child(n+3){border-top:1px solid var(--rule)}
 }
 .fig .k{font-size:12.5px;color:var(--muted);margin-bottom:3px}
-.fig .v{font-size:26px;font-weight:650;letter-spacing:-.03em;line-height:1.15}
+.fig .v{font-size:24px;font-weight:650;letter-spacing:-.03em;line-height:1.15}
 .fig .u{font-size:13px;font-weight:450;color:var(--muted);margin-left:2px}
 .fig.ochre .v{color:var(--ochre)}
 .fig .note{font-size:12px;color:var(--muted);margin-top:2px}
 
-h3{font-size:14px;font-weight:640;margin:30px 0 0;
+h3{font-size:14px;font-weight:640;margin:28px 0 0;
   padding-bottom:7px;border-bottom:1px solid var(--rule);
   display:flex;align-items:baseline;gap:8px}
 h3 span{font-weight:400;color:var(--muted);font-size:12.5px}
+h3 .sw{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+h3 .sw.cy{background:var(--blue)}
+h3 .sw.un{background:#fff;border:2.5px solid var(--warn)}
+h3 .sw.dj{background:var(--gold);border-radius:1px}
 
-/* 공고 */
 .yr{margin-top:8px}
 .yr>summary{cursor:pointer;list-style:none;padding:9px 0;
   border-bottom:1px solid var(--rule);display:flex;gap:10px;
   align-items:baseline;font-size:13.5px}
 .yr>summary::-webkit-details-marker{display:none}
-.yr>summary::before{content:"+";width:14px;color:var(--muted);
-  font-weight:600}
+.yr>summary::before{content:"+";width:14px;color:var(--muted);font-weight:600}
 .yr[open]>summary::before{content:"–"}
 .yr>summary b{font-size:15px;font-weight:620}
-.yr>summary i{margin-left:auto;color:var(--muted);font-style:normal;
-  font-size:12.5px}
+.yr>summary i{margin-left:auto;color:var(--muted);font-style:normal;font-size:12.5px}
 
-.nt{padding:15px 0 17px;border-bottom:1px solid var(--rule);
+.nt{padding:14px 0 16px;border-bottom:1px solid var(--rule);
   scroll-margin-top:14px;transition:background .3s}
-.nt.flash{background:#e6e7df}
+.nt.flash,.lead.flash{background:#e6e7df}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
   vertical-align:1px;margin-right:5px}
 .dot.close{background:var(--blue)}
 .dot.short{background:var(--warn)}
 .dot.none{background:var(--muted)}
 .nt-hd{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
-.nt-hd .nm{font-size:16.5px;font-weight:620;letter-spacing:-.02em}
+.nt-hd .nm{font-size:16px;font-weight:620;letter-spacing:-.02em}
 .nt-hd .dt{color:var(--muted);font-size:12.5px}
 .nt-meta{color:var(--muted);font-size:12.5px;margin-top:3px}
 .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
@@ -171,74 +156,52 @@ h3 span{font-weight:400;color:var(--muted);font-size:12.5px}
   border:1px solid var(--rule);color:var(--muted)}
 .tag.hot{border-color:rgba(140,58,43,.5);color:var(--warn)}
 .tag.cap{border-color:rgba(44,74,124,.45);color:var(--blue)}
+.tag.brand{border-color:rgba(25,28,24,.35);color:var(--ink)}
+.tag.est{border-color:rgba(140,58,43,.5);color:var(--warn)}
 
-table{width:100%;border-collapse:collapse;margin-top:11px;font-size:13px}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
 th,td{padding:5px 8px;text-align:right;white-space:nowrap}
-th{font-weight:550;color:var(--muted);font-size:12px;
-  border-bottom:1px solid var(--rule)}
+th{font-weight:550;color:var(--muted);font-size:12px;border-bottom:1px solid var(--rule)}
 th:first-child,td:first-child{text-align:left}
 tbody tr+tr td{border-top:1px solid rgba(211,213,204,.6)}
 td.r-close{color:var(--blue);font-weight:600}
 td.r-short{color:var(--warn)}
 td.r-none{color:var(--muted)}
 .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
-tr.pick{cursor:pointer}
-tr.pick:hover td{background:var(--card)}
-tr.pick td b{font-weight:600}
 .lk{margin-top:9px;font-size:13px}
-.foot{margin:34px 0 40px;font-size:12px;color:var(--muted);
+.foot{margin:32px 0 40px;font-size:12px;color:var(--muted);
   border-top:1px solid var(--rule);padding-top:12px;max-width:60em}
 .spin{color:var(--muted);font-size:13.5px;padding:8px 0}
 
-/* ── 보기 전환 ──────────────────────────── */
-.modes{display:inline-flex;border:1px solid var(--rule);border-radius:4px;
-  overflow:hidden;background:var(--card)}
-.modes button{padding:4px 12px;font-size:13px;color:var(--muted)}
-.modes button+button{border-left:1px solid var(--rule)}
-.modes button.on{background:var(--ink);color:var(--paper);font-weight:600}
-
-/* ── 대장아파트 ─────────────────────────── */
-.lead{margin-top:14px;padding:16px 18px 15px;background:var(--card);
-  border:1px solid var(--rule);border-left:3px solid var(--ochre);border-radius:3px;
-  scroll-margin-top:14px;transition:background .3s}
-.lead.flash,.dj-row.flash td,.cand.flash{background:#e6e7df}
-.lead .nm{font-size:20px;font-weight:680;letter-spacing:-.03em}
+/* 대장 카드 */
+.lead{margin-top:12px;padding:14px 16px 13px;background:var(--card);
+  border:1px solid var(--rule);border-left:3px solid var(--gold);
+  border-radius:3px;scroll-margin-top:14px;transition:background .3s}
+.lead .nm{font-size:18px;font-weight:680;letter-spacing:-.03em}
 .lead .kv{display:grid;grid-template-columns:4.6em 1fr;gap:3px 10px;
-  margin-top:10px;font-size:13.5px}
+  margin-top:9px;font-size:13.5px}
 .lead .kv dt{color:var(--muted)}
 .lead .kv dd{margin:0}
-.lead .big{font-size:22px;font-weight:650;letter-spacing:-.03em;color:var(--ochre)}
+.lead .big{font-size:20px;font-weight:650;letter-spacing:-.03em;color:var(--ochre)}
 .lead.alt{border-left-color:var(--muted)}
-.lead.alt .nm{font-size:17px}
-.tag.brand{border-color:rgba(25,28,24,.35);color:var(--ink)}
-.tag.hi{border-color:rgba(138,90,18,.55);color:var(--ochre)}
-.tag.relax{border-color:rgba(140,58,43,.45);color:var(--warn)}
-.tag.st{border-color:rgba(44,74,124,.45);color:var(--blue)}
-.cand{padding:14px 0 15px;border-bottom:1px solid var(--rule);scroll-margin-top:14px}
-.cand .nm{font-size:16px;font-weight:620;letter-spacing:-.02em}
-.cand .row{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px;font-size:13px}
-.cand .row b{font-weight:620}
-.cmp{display:inline-block;font-size:12px;padding:0 6px;border-radius:2px;
-  background:rgba(138,90,18,.12);color:var(--ochre);font-weight:600}
-.cmp.up{background:rgba(140,58,43,.12);color:var(--warn)}
-td.l{text-align:left;white-space:normal;min-width:7em}
-tr.dj-row.dim td{opacity:.35}
-@media(max-width:520px){td .tag{display:none}}
-.mk-lg i{display:inline-block;width:9px;height:9px;border-radius:50%;
-  vertical-align:0;margin:0 5px 0 0}
-.mk-lg span{margin-right:12px;white-space:nowrap}
-svg.map g.mks circle.dot.lead{fill:var(--ochre)}
-svg.map g.mks circle.dot.dl{fill:var(--blue)}
-svg.map g.mks circle.dot.cand{fill:var(--paper);stroke:var(--blue)!important}
-svg.map g.mks circle.dot.top{fill:var(--muted)}
+.lead.alt .nm{font-size:16px}
+
+.dongbar{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+  margin:22px 0 -4px;padding:7px 11px;background:var(--card);
+  border:1px solid var(--rule);border-radius:3px;font-size:13px}
+.dongbar b{font-weight:640}
+.dongbar span{color:var(--muted);font-size:12.5px}
+.dongbar button{margin-left:auto;border:1px solid var(--rule);
+  border-radius:3px;padding:2px 9px;font-size:12.5px}
 </style>
 </head>
 <body>
 <header>
-  <h1 id="ttl">시군구 청약·미분양 조회</h1>
-  <div class="modes" role="tablist" aria-label="보기">
-    <button id="m-cy" class="on" role="tab" aria-selected="true">청약·미분양</button>
-    <button id="m-dj" role="tab" aria-selected="false">대장아파트</button>
+  <h1>청약·미분양·대장아파트 지도</h1>
+  <div class="layers" id="layers">
+    <button data-l="cy" class="on" aria-pressed="true"><i class="sw"></i>최근 3년 청약<span class="n" id="n-cy"></span></button>
+    <button data-l="un" class="on" aria-pressed="true"><i class="sw"></i>준공후 미분양<span class="n" id="n-un"></span></button>
+    <button data-l="dj" class="on" aria-pressed="true"><i class="sw"></i>대장아파트<span class="n" id="n-dj"></span></button>
   </div>
   <div class="src" id="src"></div>
 </header>
@@ -246,1204 +209,25 @@ svg.map g.mks circle.dot.top{fill:var(--muted)}
 <div class="wrap">
   <div class="left">
     <div class="crumb" id="crumb"></div>
-    <div id="mapbox"></div>
+    <div id="map"></div>
     <div class="legend" id="legend"></div>
-    <div class="offmap" id="offmap"></div>
   </div>
   <div class="right" id="panel">
-    <p class="empty">지도에서 시·도를 고르면 시·군·구가 펼쳐집니다.
-      시·군·구를 고르면 최근 3년 아파트 청약 결과와 조회 시점의 미분양
-      현황을 함께 보여줍니다.</p>
+    <p class="empty">지도를 확대하거나 지역을 눌러 들어가면
+      그 지역의 청약 결과, 준공후 미분양, 대장아파트를 함께 보여줍니다.</p>
   </div>
 </div>
 
 <script>
-const E = window.__EMBEDDED__ || null;
+/* ──────────────────────────────────────────────────────────────
+   자료 읽기
+   ────────────────────────────────────────────────────────────── */
 const $ = (id) => document.getElementById(id);
-const cache = {map:{}, region:{}, emd:{}, dj:{}};
-let MODE = 'cy';                 // cy: 청약·미분양, dj: 대장아파트
-let DJ = null;                   // 대장아파트 요약 (daejang/index.json)
-let IDX = null, NAT = null, view = {sido:null, sgg:null};
-let curDong = null;              // 지금 고른 읍면동
-let curPanel = null;             // 패널을 다시 그릴 때 쓰는 원본
-const NS = 'http://www.w3.org/2000/svg';
-
-async function grab(kind, key) {
-  // 파일명은 영문 슬러그를 쓴다. 한글 파일명은 정적 호스팅에서
-  // 인코딩이 어긋나 404가 나는 경우가 있다. 단일 파일 판본도
-  // 같은 키를 쓰므로 여기서 한 번만 변환한다.
-  const s = SLUG[key] || key;
-  if (E) {
-    const dj = E.daejang || {};
-    const hit = kind === 'map' ? (key ? E.map[s] : E.mapNational)
-      : kind === 'emd' ? (E.emd || {})[s]
-      : kind === 'djindex' ? dj.index
-      : kind === 'dj' ? (dj.region || {})[s]
-      : (kind === 'index' ? E.index : E.region[s]);
-    if (!hit) throw new Error(`${key} 자료가 파일에 없습니다`);
-    return hit;
-  }
-  const url = kind === 'index' ? 'index.json'
-    : kind === 'map' ? (key ? `map/${s}.json` : 'map-national.json')
-    : kind === 'emd' ? `emd/${s}.json`
-    : kind === 'djindex' ? 'daejang/index.json'
-    : kind === 'dj' ? `daejang/${s}.json`
-    : `region/${s}.json`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${url} 를 불러오지 못했습니다 (${r.status})`);
-  return r.json();
-}
-
-const fmt = (n) => n == null ? '–' : n.toLocaleString('ko-KR');
-
-/* 미분양 세대수를 5단계로 나눈다. 상위 지역이 워낙 커서
-   등간격으로 자르면 대부분이 최하 단계로 뭉친다. 실제 분포를
-   보고 자를 수 있게 분위수를 쓴다. */
-function makeScale(values, cols) {
-  const v = values.filter((x) => x > 0).sort((a, b) => a - b);
-  if (!v.length) return {cut: [], color: () => 'var(--u0)', max: 0};
-  const q = (p) => v[Math.min(v.length - 1, Math.floor(v.length * p))];
-  const cut = [q(0.25), q(0.5), q(0.75), q(0.92)];
-  cols = cols || ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
-  return {
-    cut, cols, min: v[0], max: v[v.length - 1],
-    color(n) {
-      if (!n) return 'var(--u0)';
-      for (let i = 0; i < cut.length; i++) if (n <= cut[i]) return cols[i];
-      return cols[3];
-    }
-  };
-}
-
-/* 전국 지도에서 수도권과 충청권 라벨이 서로 겹친다. 지역이 작아
-   라벨을 안에 넣을 수 없으니 방향만 살짝 밀어준다. */
-const NUDGE = {서울:[-6,-14], 인천:[-30,6], 경기:[30,26], 세종:[-26,0],
-  대전:[8,14], 대구:[12,-2], 울산:[16,6], 부산:[12,12], 광주:[-10,0]};
-
-function drawMap(m, level, scale, stats, onPick) {
-  const names = Object.keys(m.paths);
-  const svg = [`<svg class="map" viewBox="${m.viewBox}" role="group"
-      aria-label="${level === 'nat' ? '전국 시도' : '시군구'} 지도">`];
-  for (const n of names) {
-    const s = stats[n] || {};
-    const val = s.v !== undefined ? s.v : s.unsold;
-    svg.push(`<path d="${m.paths[n]}" data-n="${n}"
-      fill="${scale.color(val)}" role="button" tabindex="0"
-      vector-effect="non-scaling-stroke"
-      aria-label="${n} ${s.label || `미분양 ${fmt(s.unsold)}호`}"></path>`);
-  }
-  for (const n of names) {
-    let p = m.labels[n]; if (!p) continue;
-    if (level === 'nat' && NUDGE[n])
-      p = [p[0] + NUDGE[n][0], p[1] + NUDGE[n][1]];
-    const s = stats[n] || {};
-    const small = level !== 'nat' && names.length > 20;
-    const cls = (s.v !== undefined ? s.v : s.unsold) || s.n ? '' : ' class="dim"';
-    if (s.n) svg.push(`<rect class="mk" x="${p[0] - (small ? 24 : 30)}"
-      y="${p[1] - (small ? 9 : 11)}" width="${small ? 7 : 8}"
-      height="${small ? 7 : 8}"></rect>`);
-    svg.push(`<text${cls} x="${p[0] + (s.n ? 5 : 0)}" y="${p[1]}"
-      data-fs="${small ? 13 : 16}" style="font-size:${small ? 13 : 16}px"
-      data-t="${n}">${n}</text>`);
-  }
-  svg.push('</svg>');
-  $('mapbox').innerHTML = svg.join('');
-  $('mapbox').querySelectorAll('path').forEach((el) => {
-    const go = () => onPick(el.dataset.n);
-    el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
-  });
-  drawLegend(scale);
-}
-
-function drawLegend(scale) {
-  if (!scale.cut.length) { $('legend').innerHTML = ''; return; }
-  if (MODE === 'dj') {
-    $('legend').innerHTML =
-      `<div>색: 평균 매매 시세 (공급면적 평당가, 최근 12개월 실거래)</div>
-       <div class="bar">${scale.cols.map((x) => `<i style="background:${x}"></i>`).join('')}</div>
-       <div class="ends num"><span>${fmtPpy(scale.min)}</span><span>${fmtPpy(scale.max)}</span></div>`;
-    return;
-  }
-  const c = ['var(--u1)', 'var(--u2)', 'var(--u3)', 'var(--u4)'];
-  $('legend').innerHTML =
-    `<div>색: 미분양 세대수 (호)</div>
-     <div class="bar">${c.map((x) => `<i style="background:${x}"></i>`).join('')}</div>
-     <div class="ends num"><span>1</span><span>${fmt(scale.max)}</span></div>
-     <div style="margin-top:9px"><span class="mk"></span>최근 3년 청약 공고 있음</div>`;
-}
-
-/* 선택한 시군구로 뷰박스를 부드럽게 좁힌다. SVG 뷰박스는 CSS로
-   전환할 수 없어 프레임마다 직접 값을 옮긴다. */
-function setView(box, animate) {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg) return;
-  const cur = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
-  const to = box;
-  if (!animate) { svg.setAttribute('viewBox', to.join(' ')); return; }
-  const t0 = performance.now(), dur = 340;
-  (function step(t) {
-    const k = Math.min(1, (t - t0) / dur);
-    const e = 1 - Math.pow(1 - k, 3);
-    svg.setAttribute('viewBox',
-      cur.map((v, i) => (v + (to[i] - v) * e).toFixed(1)).join(' '));
-    if (k < 1) requestAnimationFrame(step);
-    else { sizeMarkers(); layoutEmdLabels(); }
-  })(performance.now());
-}
-
-function padBox(b, pad = 0.22) {
-  const [x, y, w, h] = b;
-  let side = Math.max(w, h) * (1 + pad);
-  // 제주시처럼 시도의 대부분을 차지하는 지역은 여백을 주면 오히려
-  // 축소된다. 시도 전체 화면보다 커지지 않게 막는다.
-  if (curFull) side = Math.min(side, Math.max(curFull[2], curFull[3]));
-  return [x + w / 2 - side / 2, y + h / 2 - side / 2, side, side];
-}
-
-/* 확대 배율이 바뀌면 마커와 지명 크기를 다시 맞춘다. 뷰박스 좌표계라
-   그냥 두면 확대할수록 점과 글자가 같이 커진다. */
-function sizeMarkers() {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg) return;
-  const vb = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
-  const k = vb[2] / (curFull ? curFull[2] : vb[2]);
-  svg.querySelectorAll('text[data-fs]').forEach((t) => {
-    const base = +t.dataset.fs || 16;
-    const fs = base * k;
-    // 글자 테두리(흰 윤곽)도 같이 줄인다. 그냥 두면 확대할수록
-    // 테가 글자를 덮어 읽을 수 없게 된다.
-    t.setAttribute('style',
-      `font-size:${fs.toFixed(2)}px;stroke-width:${(fs * 0.2).toFixed(2)}px`);
-  });
-  const g = svg.querySelector('g.mks');
-  if (!g) return;
-  const r = Math.max(2.5, vb[2] * 0.018);
-  g.querySelectorAll('circle.dot').forEach((c) => {
-    const k = +c.dataset.k || 1;
-    c.setAttribute('r', r * k);
-    c.setAttribute('stroke-width', r * (c.classList.contains('cand') ? 0.45 : 0.28));
-  });
-  // 손가락으로 누를 수 있게 보이지 않는 큰 판을 깔아둔다
-  g.querySelectorAll('circle.hit').forEach((c) =>
-    c.setAttribute('r', Math.max(r * 2.4, vb[2] * 0.035)));
-  g.querySelectorAll('text').forEach((t) =>
-    t.setAttribute('style', `font-size:${r * 1.15}px`));
-  g.querySelectorAll('g.pin').forEach((p) => {
-    const bx = +p.dataset.x, by = +p.dataset.y;
-    const i = +p.dataset.i, n = +p.dataset.n;
-    if (n > 1) {
-      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-      p.setAttribute('transform',
-        `translate(${bx + Math.cos(a) * r * 1.7},${by + Math.sin(a) * r * 1.7})`);
-    } else {
-      p.setAttribute('transform', `translate(${bx},${by})`);
-    }
-  });
-}
-
-function drawMarkers(m, notices) {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg || !m.proj) return 0;
-  const old = svg.querySelector('g.mks');
-  if (old) old.remove();
-  const p = m.proj;
-  const spots = {};
-  for (const n of notices) {
-    if (!n.loc) continue;
-    const x = (n.loc[1] * p.cos - p.sx0) * p.scale;
-    const y = p.h - (n.loc[0] - p.minLat) * p.scale;
-    const k = x.toFixed(1) + ':' + y.toFixed(1);
-    (spots[k] = spots[k] || {x, y, list: []}).list.push(n);
-  }
-  const parts = [];
-  let count = 0;
-  for (const s of Object.values(spots)) {
-    s.list.forEach((n, i) => {
-      count++;
-      const cls = n.closedTypes ? 'close'
-        : n.ratedTypes ? 'short' : 'none';
-      const res = n.closedTypes ? '마감 포함'
-        : n.ratedTypes ? '전 타입 미달' : '결과 미공개';
-      parts.push(`<g class="pin" data-x="${s.x.toFixed(1)}"
-        data-y="${s.y.toFixed(1)}" data-i="${i}" data-n="${s.list.length}"
-        data-id="${n.id}" role="button" tabindex="0">
-        <title>${n.name} · ${n.noticeDate} · ${res}</title>
-        <circle class="hit" r="9" fill="transparent"></circle>
-        <circle class="dot ${cls}" r="4"></circle></g>`);
-    });
-  }
-  if (!count) return 0;
-  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  g.setAttribute('class', 'mks');
-  g.innerHTML = parts.join('');
-  svg.appendChild(g);
-  g.querySelectorAll('g.pin').forEach((el) => {
-    const go = () => focusNotice(el.dataset.id);
-    el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
-  });
-  sizeMarkers();
-  return count;
-}
-
-/* ── 읍면동 경계 ────────────────────────── */
-/* 시군구로 확대한 뒤 그 안쪽 행정동 경계를 얹는다. 좌표계가 시군구
-   지도와 같아 별도 변환 없이 같은 뷰박스에 그대로 올라간다. */
-async function showEmd(sido, sgg) {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg) return;
-  clearEmd();
-  try {
-    const all = cache.emd[sido] || (cache.emd[sido] = await grab('emd', sido));
-    const data = all[sgg];
-    if (!data) return;                      // 울릉군처럼 지도 밖인 지역
-    if (view.sido !== sido || view.sgg !== sgg) return;   // 그새 옮겨갔다
-    drawEmd(data, sgg);
-  } catch (e) {
-    /* 경계를 못 불러와도 본 기능은 그대로 쓴다 */
-  }
-}
-
-function clearEmd() {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg) return;
-  const g = svg.querySelector('g.emd');
-  if (g) g.remove();
-  svg.classList.remove('emdon');
-}
-
-function drawEmd(data, sgg) {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg) return;
-  const g = document.createElementNS(NS, 'g');
-  g.setAttribute('class', 'emd');
-  const parts = [];
-  for (const [n, d] of Object.entries(data.paths))
-    parts.push(`<path d="${d}" data-e="${n}" role="button" tabindex="0"
-      vector-effect="non-scaling-stroke"
-      aria-label="${n}"><title>${n}</title></path>`);
-  // 이름은 넓은 동부터 그린다. 겹칠 때 작은 쪽을 감추기 위해서다.
-  const labs = Object.entries(data.labels || {})
-    .sort((a, b) => (b[1][2] || 0) - (a[1][2] || 0));
-  for (const [n, p] of labs)
-    parts.push(`<text data-e="${n}" data-fs="17"
-      x="${p[0]}" y="${p[1]}">${n}</text>`);
-  g.innerHTML = parts.join('');
-  // 시군구 이름표(맨 끝 text들)보다 아래, 시군구 면보다 위에 끼운다.
-  svg.insertBefore(g, svg.querySelector(':scope > text'));
-  svg.classList.add('emdon');
-  g.querySelectorAll('path').forEach((el) => {
-    const go = () => pickDong(el.dataset.e);
-    el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
-  });
-  sizeMarkers();
-  layoutEmdLabels();
-}
-
-/* 동 이름이 서로 겹치면 넓은 동만 남긴다. 확대 배율이 바뀔 때마다
-   다시 계산한다. */
-function layoutEmdLabels() {
-  const svg = $('mapbox').querySelector('svg');
-  const g = svg && svg.querySelector('g.emd');
-  if (!g) return;
-  const texts = [...g.querySelectorAll('text')];
-  texts.forEach((t) => t.classList.remove('hide'));
-  const placed = [];
-  for (const t of texts) {
-    let b;
-    try { b = t.getBBox(); } catch (e) { continue; }
-    if (!b.width) continue;
-    const pad = b.height * 0.12;
-    const r = [b.x - pad, b.y - pad, b.x + b.width + pad, b.y + b.height + pad];
-    const hit = placed.some((o) =>
-      r[0] < o[2] && o[0] < r[2] && r[1] < o[3] && o[1] < r[3]);
-    if (hit) t.classList.add('hide');
-    else placed.push(r);
-  }
-}
-
-/* 행정동 이름은 주소에 그대로 나오지 않는 경우가 많다.
-   '송림3·5동' -> '송림동', '화수1·화평동' -> '화수동','화평동' 처럼
-   주소에서 찾을 만한 형태를 같이 만든다. */
-function dongAliases(name) {
-  const out = new Set([name]);
-  const tail = name.slice(-1);
-  const body = name.slice(0, -1);
-  out.add(body.replace(/[\d·]/g, '') + tail);
-  out.add(body.replace(/[\d·]/g, '').replace(/본$/, '') + tail);   // 방배본동 -> 방배동
-  for (const part of body.split('·')) {
-    const b = part.replace(/\d/g, '');
-    if (b) out.add(b + tail);
-  }
-  return [...out].filter((x) => x.length >= 3);
-}
-
-function pickDong(name) {
-  curDong = curDong === name ? null : name;
-  const svg = $('mapbox').querySelector('svg');
-  const g = svg && svg.querySelector('g.emd');
-  if (g) g.querySelectorAll('path').forEach((p) =>
-    p.classList.toggle('on', p.dataset.e === curDong));
-  applyDong();
-}
-
-/* 고른 동에 속한 공고를 가린다. 좌표가 있으면 경계 안인지 직접
-   판정하고(브라우저의 isPointInFill), 좌표가 없으면 주소 문자열로
-   맞춰 본다. 둘 다 안 되면 제외하고 몇 건인지 알린다. */
-function dongMembers(name) {
-  const svg = $('mapbox').querySelector('svg');
-  const el = svg && svg.querySelector(`g.emd path[data-e="${CSS.escape(name)}"]`);
-  const ns = (curPanel && curPanel.R.notices) || [];
-  const p = curMap && curMap.proj;
-  const alias = dongAliases(name);
-  const ids = new Set();
-  let unplaced = 0;
-  for (const n of ns) {
-    if (n.loc && el && el.isPointInFill && p) {
-      const x = (n.loc[1] * p.cos - p.sx0) * p.scale;
-      const y = p.h - (n.loc[0] - p.minLat) * p.scale;
-      let hit = false;
-      try { hit = el.isPointInFill(new DOMPoint(x, y)); } catch (e) { hit = false; }
-      if (hit) ids.add(n.id);
-      continue;
-    }
-    const addr = n.addr || '';
-    if (alias.some((a) => addr.includes(a))) ids.add(n.id);
-    else if (!n.loc) unplaced++;
-  }
-  return {ids, unplaced};
-}
-
-function applyDong() {
-  if (!curPanel) return;
-  if (curPanel.dj) {
-    renderDjPanel(curPanel.sido, curPanel.sgg, curPanel.R, curDong);
-    if (curDong && window.matchMedia('(max-width:860px)').matches)
-      $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
-    return;
-  }
-  const info = curDong ? dongMembers(curDong) : null;
-  renderPanel(curPanel.sido, curPanel.sgg, curPanel.R, curDong, info);
-  const svg = $('mapbox').querySelector('svg');
-  const g = svg && svg.querySelector('g.mks');
-  if (g) g.querySelectorAll('g.pin').forEach((el) =>
-    el.classList.toggle('dim', !!info && !info.ids.has(el.dataset.id)));
-  if (curDong && window.matchMedia('(max-width:860px)').matches)
-    $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
-}
-
-function focusNotice(id) {
-  const el = document.getElementById('nt-' + id);
-  if (!el) return;
-  const y = el.getBoundingClientRect().top + window.scrollY - 12;
-  const box = $('panel');
-  el.scrollIntoView({behavior: 'smooth', block: 'center'});
-  el.classList.add('flash');
-  setTimeout(() => el.classList.remove('flash'), 1400);
-}
-
-function mark(name) {
-  const box = $('mapbox');
-  box.querySelectorAll('.on,.off').forEach((x) =>
-    x.classList.remove('on', 'off'));
-  box.querySelectorAll('path[data-n]').forEach((x) =>
-    x.classList.add(x.dataset.n === name ? 'on' : 'off'));
-  box.querySelectorAll('text[data-t]').forEach((x) =>
-    x.classList.add(x.dataset.t === name ? 'on' : 'off'));
-}
-
-/* ── 화면 전환 ──────────────────────────── */
-async function showNational() {
-  view = {sido: null, sgg: null};
-  curDong = null; curPanel = null;
-  NAT = NAT || await grab('map');
-  if (MODE === 'dj') return showNationalDj();
-  const stats = {};
-  for (const [s, v] of Object.entries(IDX.sidoSummary))
-    stats[s] = {unsold: v.total, n: v.notices};
-  const scale = makeScale(Object.values(stats).map((x) => x.unsold));
-  $('crumb').innerHTML = '<b>전국</b><span>시·도를 선택하세요</span>';
-  $('offmap').innerHTML = '';
-  drawMap(NAT, 'nat', scale, stats, showSido);
-  renderOverview();
-}
-
-function renderOverview() {
-  const M = IDX.meta;
-  const rows = Object.entries(IDX.sidoSummary)
-    .sort((a, b) => b[1].total - a[1].total);
-  const sum = (f) => rows.reduce((a, [, v]) => a + (v[f] || 0), 0);
-  const figs = [
-    ['미분양', fmt(sum('total')), '호', 'ochre', `${ym(M.unsoldBaseYm)} 기준`],
-    ['준공 후 미분양', fmt(sum('after')), '호', 'ochre',
-      `전체의 ${Math.round(sum('after') / sum('total') * 100)}%`],
-    ['청약 공고', fmt(sum('notices')), '건', '',
-      `${M.noticeFrom} ~ ${M.noticeTo}`],
-    ['공급 세대', fmt(sum('supply')), '세대', '', ''],
-    ['미분양 상위', rows[0][0], '', 'ochre', `${fmt(rows[0][1].total)}호`],
-  ];
-  $('panel').innerHTML =
-    `<h2 class="place">전국</h2>
-     <div class="place-sub">아파트 분양 공고와 미분양 현황</div>
-     <div class="figs">` +
-    figs.map(([k, v, u, c, note]) => `<div class="fig ${c}">
-      <div class="k">${k}</div>
-      <div class="v num">${v}<span class="u">${u}</span></div>
-      ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') +
-    `</div>
-     <h3>시·도별 <span>미분양 많은 순</span></h3>
-     <div class="tw"><table><thead><tr>
-       <th>시·도</th><th>미분양</th><th>준공 후</th><th>비중</th>
-       <th>공고</th><th>공급 세대</th><th>평균 분양가</th></tr></thead>
-     <tbody>` + rows.map(([s, v]) => `<tr class="pick" data-s="${s}">
-       <td><b>${sidoFull(s)}</b></td>
-       <td class="num">${fmt(v.total)}</td>
-       <td class="num">${fmt(v.after)}</td>
-       <td class="num">${v.total ? Math.round(v.after / v.total * 100) + '%' : '–'}</td>
-       <td class="num">${fmt(v.notices)}</td>
-       <td class="num">${fmt(v.supply)}</td>
-       <td class="num">${v.avgPyeong ? fmt(v.avgPyeong) : '–'}</td></tr>`).join('') +
-    `</tbody></table></div>
-     <p class="foot">색이 진한 지역일수록 미분양이 많습니다. 표의 시·도를
-     누르면 시·군·구 지도로 넘어갑니다. 분양가 단위는 만원/평입니다.</p>`;
-  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
-    tr.onclick = () => showSido(tr.dataset.s));
-}
-
-async function showSido(sido) {
-  view = {sido, sgg: null};
-  curDong = null; curPanel = null;
-  $('mapbox').innerHTML = '<p class="spin">경계를 불러오는 중…</p>';
-  let m;
-  try {
-    m = cache.map[sido] || (cache.map[sido] = await grab('map', sido));
-  } catch (e) {
-    $('mapbox').innerHTML = `<p class="spin">${sidoFull(sido)} 경계를
-      불러오지 못했습니다. ${e.message}</p>`;
-    $('crumb').innerHTML = '<button id="back">전국</button>';
-    $('back').onclick = showNational;
-    return;
-  }
-  const names = Object.keys(m.paths).concat(m.offmap || []);
-  // 세종처럼 하위 시군구가 하나뿐인 시도는 두 번 누를 이유가 없다.
-  if (names.length === 1) { await showSggOn(sido, m, names[0]); return; }
-  if (MODE === 'dj') return showSidoDj(sido, m);
-  const stats = {};
-  for (const [k, v] of Object.entries(IDX.summary)) {
-    const [s, g] = k.split('|');
-    if (s === sido) stats[g] = v;
-  }
-  const scale = makeScale(Object.values(stats).map((x) => x.unsold));
-  $('crumb').innerHTML =
-    `<button id="back">전국</button><b>${m.name}</b>
-     <span>시·군·구를 선택하세요</span>`;
-  $('back').onclick = showNational;
-  curMap = m;
-  curFull = m.viewBox.split(/[\s,]+/).map(Number);
-  drawMap(m, 'sgg', scale, stats, (g) => showSgg(sido, g));
-  sizeMarkers();
-  $('offmap').innerHTML = (m.offmap || []).map((g) =>
-    `<button data-g="${g}">${g}</button>`).join('');
-  $('offmap').querySelectorAll('button').forEach((b) =>
-    b.onclick = () => showSgg(sido, b.dataset.g));
-  $('panel').innerHTML =
-    `<p class="empty">${m.name}의 시·군·구를 고르세요.</p>`;
-}
-
-async function showSgg(sido, sgg) {
-  view = {sido, sgg};
-  curDong = null;
-  mark(sgg);
-  if (MODE === 'dj') return showSggDj(sido, sgg);
-  const notices = await loadPanel(sido, sgg);
-  // 3단계: 해당 시군구로 확대하고 읍면동 경계와 단지 위치를 얹는다
-  if (curMap && curMap.boxes && curMap.boxes[sgg]) {
-    setView(padBox(curMap.boxes[sgg]), true);
-  }
-  const n = drawMarkers(curMap, notices || []);
-  await showEmd(sido, sgg);
-  $('crumb').innerHTML =
-    `<button id="back">전국</button>
-     <button id="wide">${SIDO_FULL[sido]}</button><b>${sgg}</b>`;
-  $('back').onclick = showNational;
-  $('wide').onclick = () => showSido(sido);
-  markerLegend(n, (notices || []).length);
-}
-
-function markerLegend(shown, total) {
-  const base = $('legend').innerHTML.split('<hr')[0];
-  const svg = $('mapbox').querySelector('svg');
-  const hasEmd = svg && svg.querySelector('g.emd');
-  const emdLine = hasEmd
-    ? `<div style="margin-top:9px">가는 선: 읍면동 경계 — 누르면 그 동의
-       공고만 봅니다</div>` : '';
-  if (!total) { $('legend').innerHTML = base + emdLine; return; }
-  const miss = total - shown;
-  $('legend').innerHTML = base + emdLine +
-    `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px">
-     <div>점: 단지 위치 (우편번호 기준 근사)</div>
-     <div style="margin-top:5px">
-       <span class="dot close"></span>마감 타입 있음
-       <span class="dot short" style="margin-left:10px"></span>전 타입 미달
-       <span class="dot none" style="margin-left:10px"></span>결과 미공개</div>
-     ${miss > 0 ? `<div style="margin-top:5px">위치를 찾지 못한 공고
-       ${miss}건은 표시되지 않습니다.</div>` : ''}`;
-}
-
-/* 단일 시군구 시도: 지도는 그 지역만 그리고 상세를 바로 띄운다. */
-async function showSggOn(sido, m, sgg) {
-  view = {sido, sgg};
-  curDong = null;
-  const scale = makeScale([]);
-  $('crumb').innerHTML =
-    `<button id="back">전국</button><b>${m.name}</b>`;
-  $('back').onclick = showNational;
-  curMap = m;
-  curFull = m.viewBox.split(/[\s,]+/).map(Number);
-  drawMap(m, 'sgg', scale, {}, () => {});
-  mark(sgg);
-  $('offmap').innerHTML = '';
-  if (MODE === 'dj') { await djSggBody(sido, sgg); return; }
-  const notices = await loadPanel(sido, sgg);
-  const cnt = drawMarkers(m, notices || []);
-  await showEmd(sido, sgg);
-  markerLegend(cnt, (notices || []).length);
-}
-
-async function loadPanel(sido, sgg) {
-  $('panel').innerHTML = '<p class="spin">불러오는 중…</p>';
-  try {
-    const data = cache.region[sido] ||
-      (cache.region[sido] = await grab('region', sido));
-    const R = data[sgg] || {notices: [], unsold: {}};
-    curPanel = {sido, sgg, R};
-    renderPanel(sido, sgg, R);
-    if (window.matchMedia('(max-width:860px)').matches)
-      $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
-    return R.notices || [];
-  } catch (e) {
-    $('panel').innerHTML = `<p class="empty">${sgg} 자료를 불러오지
-      못했습니다. ${e.message}</p>`;
-    return [];
-  }
-}
-
-/* ── 결과 패널 ──────────────────────────── */
-function renderPanel(sido, sgg, R, dong, info) {
-  const M = IDX.meta;
-  const ns = R.notices || [];
-  const total = R.unsold?.total, after = R.unsold?.after;
-  const share = total && after != null
-    ? Math.round(after / total * 100) : null;
-  const supply = ns.reduce((a, x) => a + x.supply, 0);
-  const pyeong = IDX.summary[`${sido}|${sgg}`]?.pyeong;
-  const rated = ns.reduce((a, x) => a + x.ratedTypes, 0);
-  const closed = ns.reduce((a, x) => a + x.closedTypes, 0);
-
-  const figs = [
-    ['미분양', fmt(total), '호', 'ochre', `${ym(M.unsoldBaseYm)} 기준`],
-    ['준공 후 미분양', fmt(after), '호', 'ochre',
-      share == null ? '' : `전체의 ${share}%`],
-    ['청약 공고', fmt(ns.length), '건', '', `${M.noticeFrom.slice(0, 4)}년 이후`],
-    ['공급 세대', fmt(supply), '세대', '', ''],
-    ['평균 분양가', pyeong ? fmt(pyeong) : '–', '만원/평', '',
-      pyeong ? '공급면적·세대수 가중' : ''],
-    ['타입 마감률', rated ? Math.round(closed / rated * 100) : '–',
-      rated ? '%' : '', '', rated ? `${rated}개 타입 중 ${closed}개` : ''],
-  ];
-
-  let h = `<h2 class="place">${sgg}</h2>
-    <div class="place-sub">${sidoFull(sido)}</div>
-    <div class="figs">` +
-    figs.map(([k, v, u, c, note]) => `<div class="fig ${c}">
-      <div class="k">${k}</div>
-      <div class="v num">${v}${u ? `<span class="u">${u}</span>` : ''}</div>
-      ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') +
-    `</div>`;
-
-  // 읍면동을 고르면 공고 목록만 그 동으로 좁힌다. 미분양·공급 세대는
-  // 시군구 단위 통계라 위쪽 수치는 그대로 둔다.
-  const list = dong && info ? ns.filter((n) => info.ids.has(n.id)) : ns;
-  if (dong) {
-    h += `<div class="dongbar"><b>${dong}</b>
-      <span class="num">공고 ${fmt(list.length)}건</span>
-      ${info && info.unplaced ? `<span>· 좌표가 없어 가를 수 없는 공고
-        ${info.unplaced}건은 빠졌습니다</span>` : ''}
-      <button id="alldong">${sgg} 전체</button></div>`;
-  }
-
-  if (!list.length) {
-    h += `<h3>청약 공고</h3>
-      <p class="empty" style="margin-top:14px">
-      ${dong ? `${dong}에는 ${M.noticeFrom} 이후 아파트 분양 공고가 없습니다.`
-        : `${M.noticeFrom} 이후 이 지역의 아파트 분양 공고가 없습니다.`}</p>`;
-  } else {
-    const byYear = {};
-    for (const n of list) (byYear[n.noticeDate.slice(0, 4)] ||= []).push(n);
-    const years = Object.keys(byYear).sort().reverse();
-    h += `<h3>청약 공고 <span>최근 순</span></h3>`;
-    h += years.map((y, i) => {
-      const g = byYear[y];
-      const sup = g.reduce((a, x) => a + x.supply, 0);
-      return `<details class="yr"${i === 0 ? ' open' : ''}>
-        <summary><b>${y}년</b><span class="num">${g.length}건</span>
-          <i class="num">공급 ${fmt(sup)}세대</i></summary>
-        ${g.map(notice).join('')}</details>`;
-    }).join('');
-  }
-
-  h += `<div class="foot">
-    청약 자료는 한국부동산원 청약홈(공공데이터포털) 아파트 분양정보와
-    청약접수 경쟁률입니다. 분양가는 주택형별 공급금액(해당 타입 최고분양가,
-    만원)이며 평당가는 공급면적 기준으로 환산했습니다.
-    미분양은 국토교통부 미분양주택현황보고(KOSIS) ${ym(M.unsoldBaseYm)} 기준으로,
-    월 1회 공표되어 조회 시점과 1~2개월 차이가 납니다.
-    대상은 아파트 분양 공고이며 무순위·잔여세대·임의공급 등 별도 유형은
-    제외했습니다. 접수 직후이거나 경쟁률이 공표되지 않은 공고는
-    결과를 비워 두었고, 은행 전산 사정으로 접수건수는 청약홈 최종
-    수치와 다를 수 있습니다.
-    자료 생성 ${M.generated}.${dong ? ' 읍면동 경계는 2018년 통계청 행정동 기준으로, 주소의 법정동과 이름이 다를 수 있습니다.' : ''}</div>`;
-
-  $('panel').innerHTML = h;
-  const back = $('alldong');
-  if (back) back.onclick = () => pickDong(dong);
-}
-
-function notice(n) {
-  const tags = [];
-  if (n.kind) tags.push(`<span class="tag">${n.kind}</span>`);
-  if (n.rent && n.rent !== '분양주택')
-    tags.push(`<span class="tag">${n.rent}</span>`);
-  if (n.speculative) tags.push(`<span class="tag hot">투기과열지구</span>`);
-  if (n.priceCap) tags.push(`<span class="tag cap">분양가상한제</span>`);
-
-  const rows = n.types.map((t) => {
-    const cls = t.result === '마감' ? 'r-close'
-      : t.result === '미달' ? 'r-short' : 'r-none';
-    const res = t.result === '마감'
-      ? `${t.closedAt} 마감 <span class="num">${t.rate}:1</span>`
-      : t.result === '미달' ? '미달' : '결과 미공개';
-    return `<tr>
-      <td>${t.ty}</td>
-      <td class="num">${t.area ?? '–'}</td>
-      <td class="num">${fmt(t.gnrl)}</td>
-      <td class="num">${fmt(t.spsply)}</td>
-      <td class="num">${t.amount ? fmt(t.amount) : '–'}</td>
-      <td class="num">${t.pyeong ? fmt(t.pyeong) : '–'}</td>
-      <td class="num">${t.result === '결과없음' ? '–' : fmt(t.req)}</td>
-      <td class="${cls}">${res}</td></tr>`;
-  }).join('');
-
-  const meta = [n.builder, n.totalHshld ? `${fmt(n.totalHshld)}세대` : null,
-    n.moveIn ? `${n.moveIn.slice(0, 4)}년 ${+n.moveIn.slice(4)}월 입주 예정` : null,
-    n.avgPyeong ? `평균 ${fmt(n.avgPyeong)}만원/평` : null]
-    .filter(Boolean).join(' · ');
-
-  const dot = n.closedTypes ? 'close' : n.ratedTypes ? 'short' : 'none';
-  return `<div class="nt" id="nt-${n.id}">
-    <div class="nt-hd"><span class="nm"><span class="dot ${dot}"></span>${n.name}</span>
-      <span class="dt num">공고 ${n.noticeDate}</span></div>
-    <div class="nt-meta">${meta}</div>
-    <div class="nt-meta">${n.addr || ''}</div>
-    <div class="tags">${tags.join('')}</div>
-    <div class="tw"><table>
-      <thead><tr><th>주택형</th><th>공급면적</th><th>일반</th><th>특별</th>
-        <th>분양가</th><th>평당가</th><th>접수</th><th>청약 결과</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
-    <div class="lk">
-      ${n.url ? `<a href="${n.url}" target="_blank" rel="noopener">청약홈 공고 상세</a>` : ''}
-      ${n.homepage ? ` · <a href="${n.homepage}" target="_blank" rel="noopener">분양 홈페이지</a>` : ''}
-    </div></div>`;
-}
-
-/* ── 대장아파트 ─────────────────────────── */
-/* 최근 12개월 매매 실거래로 지역 평균 시세와 대장 단지를 보여준다.
-   자료는 etl_daejang.py 가 만든 daejang/*.json 이다. */
-const PCOLS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
-
-async function ensureDj() {
-  if (!DJ) DJ = await grab('djindex');
-  return DJ;
-}
-async function djRegion(sido) {
-  return cache.dj[sido] || (cache.dj[sido] = await grab('dj', sido));
-}
-
-/* 3.3㎡당 가격(만원) -> '1억 2,300만' */
-function fmtPpy(v) {
-  if (v == null) return '–';
-  v = Math.round(v / 10) * 10;
-  if (v >= 10000) {
-    const e = Math.floor(v / 10000), r = Math.round((v % 10000) / 100) * 100;
-    return r ? `${e}억 ${r.toLocaleString('ko-KR')}만` : `${e}억`;
-  }
-  return `${v.toLocaleString('ko-KR')}만`;
-}
-/* 거래금액(만원) -> '23.4억' */
-function fmtWon(v) {
-  if (v == null) return '–';
-  if (v >= 10000) {
-    const x = v / 10000;
-    return `${x >= 100 ? x.toFixed(0) : x.toFixed(x >= 10 ? 1 : 2).replace(/0$/, '').replace(/\.$/, '')}억`;
-  }
-  return `${v.toLocaleString('ko-KR')}만`;
-}
-const esc = (t) => String(t ?? '').replace(/[&<>"]/g,
-  (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-
-function djMissing(e) {
-  $('panel').innerHTML = `<p class="empty">대장아파트 자료가 아직 없습니다.
-    저장소에서 <code>python etl_daejang.py</code> 를 실행하면 만들어집니다.
-    (${esc(e && e.message)})</p>`;
-}
-
-function djFigs(figs) {
-  return `<div class="figs">` + figs.map(([k, v, u, c, note]) => `<div class="fig ${c}">
-    <div class="k">${k}</div>
-    <div class="v num">${v}${u ? `<span class="u">${u}</span>` : ''}</div>
-    ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') + `</div>`;
-}
-
-async function showNationalDj() {
-  try { await ensureDj(); } catch (e) {
-    $('crumb').innerHTML = '<b>전국</b>';
-    $('mapbox').innerHTML = ''; $('legend').innerHTML = ''; $('offmap').innerHTML = '';
-    djMissing(e); return;
-  }
-  const stats = {};
-  for (const [s, v] of Object.entries(DJ.sidoSummary))
-    stats[s] = {v: v.avg, label: `평균 평당가 ${fmtPpy(v.avg)}`};
-  const scale = makeScale(Object.values(stats).map((x) => x.v), PCOLS);
-  $('crumb').innerHTML = '<b>전국</b><span>시·도를 선택하세요</span>';
-  $('offmap').innerHTML = '';
-  drawMap(NAT, 'nat', scale, stats, showSido);
-  const M = DJ.meta;
-  const rows = Object.entries(DJ.sidoSummary).sort((a, b) => b[1].avg - a[1].avg);
-  const tot = rows.reduce((a, [, v]) => a + v.n, 0);
-  const avg = Math.round(rows.reduce((a, [, v]) => a + v.avg * v.n, 0) / Math.max(tot, 1));
-  const best = rows.map(([s, v]) => ({s, ...(v.lead || {})}))
-    .filter((x) => x.ppy).sort((a, b) => b.ppy - a.ppy)[0];
-  $('panel').innerHTML =
-    `<h2 class="place">전국</h2>
-     <div class="place-sub">지역별 평균 매매 시세와 대장아파트</div>` +
-    djFigs([
-      ['평균 시세', fmtPpy(avg), '', '', '공급면적 평당가 · 거래 가중'],
-      ['매매 거래', fmt(tot), '건', '', `${M.from} ~ ${M.to}`],
-      ['시세 1위 시·도', rows[0] ? rows[0][0] : '–', '', 'ochre',
-        rows[0] ? fmtPpy(rows[0][1].avg) : ''],
-      ['최고가 대장', best ? esc(best.name) : '–', '', 'ochre',
-        best ? `${best.s} ${esc(best.sgg)} · ${fmtPpy(best.ppy)}` : ''],
-    ]) +
-    `<h3>시·도별 <span>평균 시세 높은 순</span></h3>
-     <div class="tw"><table><thead><tr>
-       <th>시·도</th><th>평균 시세</th><th>거래</th><th>시·도 내 최고가 대장</th>
-       <th>대장 시세</th></tr></thead><tbody>` +
-    rows.map(([s, v]) => `<tr class="pick" data-s="${s}">
-       <td><b>${sidoFull(s)}</b></td>
-       <td class="num">${fmtPpy(v.avg)}</td>
-       <td class="num">${fmt(v.n)}</td>
-       <td class="l">${v.lead ? `${esc(v.lead.name)} <span style="color:var(--muted)">${esc(v.lead.sgg)}</span>` : '–'}</td>
-       <td class="num">${v.lead ? fmtPpy(v.lead.ppy) : '–'}</td></tr>`).join('') +
-    `</tbody></table></div>` + djFoot();
-  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
-    tr.onclick = () => showSido(tr.dataset.s));
-}
-
-async function showSidoDj(sido, m) {
-  try { await ensureDj(); } catch (e) { djMissing(e); return; }
-  const stats = {};
-  for (const [k, v] of Object.entries(DJ.summary)) {
-    const [s, g] = k.split('|');
-    if (s === sido) stats[g] = {v: v.avg, n: v.cand,
-      label: `평균 평당가 ${fmtPpy(v.avg)}${v.lead ? ` 대장 ${v.lead}` : ''}`};
-  }
-  const scale = makeScale(Object.values(stats).map((x) => x.v), PCOLS);
-  $('crumb').innerHTML =
-    `<button id="back">전국</button><b>${m.name}</b>
-     <span>시·군·구를 선택하세요</span>`;
-  $('back').onclick = showNational;
-  curMap = m;
-  curFull = m.viewBox.split(/[\s,]+/).map(Number);
-  drawMap(m, 'sgg', scale, stats, (g) => showSgg(sido, g));
-  sizeMarkers();
-  $('offmap').innerHTML = (m.offmap || []).map((g) =>
-    `<button data-g="${g}">${g}</button>`).join('');
-  $('offmap').querySelectorAll('button').forEach((b) =>
-    b.onclick = () => showSgg(sido, b.dataset.g));
-
-  const rows = Object.entries(stats).map(([g]) => [g, DJ.summary[`${sido}|${g}`]])
-    .sort((a, b) => b[1].avg - a[1].avg);
-  const tot = rows.reduce((a, [, v]) => a + v.n, 0);
-  const ss = DJ.sidoSummary[sido] || {};
-  $('panel').innerHTML =
-    `<h2 class="place">${sidoFull(sido)}</h2>
-     <div class="place-sub">시·군·구별 평균 시세와 대장아파트 · 최근 12개월 매매 실거래</div>` +
-    djFigs([
-      ['평균 시세', fmtPpy(ss.avg), '', '', '공급면적 평당가 · 거래 가중'],
-      ['매매 거래', fmt(tot), '건', '', ''],
-      ['최고가 대장', ss.lead ? esc(ss.lead.name) : '–', '', 'ochre',
-        ss.lead ? `${esc(ss.lead.sgg)} · ${fmtPpy(ss.lead.ppy)}` : ''],
-    ]) +
-    `<h3>시·군·구별 <span>평균 시세 높은 순 · 누르면 상세</span></h3>
-     <div class="tw"><table><thead><tr>
-       <th>시·군·구</th><th>평균 시세</th><th>전용84㎡ 중위</th><th>거래</th>
-       <th>대장</th><th>대장 시세</th></tr></thead><tbody>` +
-    rows.map(([g, v]) => `<tr class="pick" data-g="${g}">
-       <td><b>${g}</b></td>
-       <td class="num">${fmtPpy(v.avg)}</td>
-       <td class="num">${fmtWon(v.p84)}</td>
-       <td class="num">${fmt(v.n)}</td>
-       <td class="l">${v.lead ? esc(v.lead) : '–'}${v.relaxed ? ' <span class="tag relax">완화</span>' : ''}</td>
-       <td class="num">${v.leadPpy ? fmtPpy(v.leadPpy) : '–'}</td></tr>`).join('') +
-    `</tbody></table></div>` + djFoot();
-  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
-    tr.onclick = () => showSgg(sido, tr.dataset.g));
-  $('legend').innerHTML += `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px"><div class="mk-lg">
-    <span><i style="background:var(--ochre)"></i>시·군·구 대장 위치</span>
-    ${rows.some(([, v]) => v.cand) ? '<span><span class="mk"></span>대장후보(미준공) 있음</span>' : ''}</div>`;
-
-  // 시군구 대장 위치를 점으로 찍는다
-  try {
-    const R = await djRegion(sido);
-    if (view.sido !== sido || view.sgg) return;
-    const items = [];
-    for (const [g, r] of Object.entries(R)) {
-      const L = r.leader;
-      if (L && L.loc) items.push({loc: L.loc, cls: 'lead', k: 1, id: g,
-        title: `${g} 대장 · ${L.name} · ${fmtPpy(L.ppy)}`, go: () => showSgg(sido, g)});
-    }
-    drawDjMarkers(m, items);
-  } catch (e) { /* 위치 없이도 표는 쓸 수 있다 */ }
-}
-
-async function showSggDj(sido, sgg) {
-  if (curMap && curMap.boxes && curMap.boxes[sgg]) setView(padBox(curMap.boxes[sgg]), true);
-  await djSggBody(sido, sgg);
-  $('crumb').innerHTML =
-    `<button id="back">전국</button>
-     <button id="wide">${SIDO_FULL[sido]}</button><b>${sgg}</b>`;
-  $('back').onclick = showNational;
-  $('wide').onclick = () => showSido(sido);
-}
-
-/* 시군구 상세: 패널, 지도 점, 읍면동 경계 */
-async function djSggBody(sido, sgg) {
-  $('panel').innerHTML = '<p class="spin">불러오는 중…</p>';
-  let R;
-  try {
-    await ensureDj();
-    const all = await djRegion(sido);
-    R = all[sgg];
-  } catch (e) { djMissing(e); return; }
-  if (view.sido !== sido || view.sgg !== sgg) return;
-  if (!R) {
-    curPanel = null;
-    $('panel').innerHTML = `<h2 class="place">${sgg}</h2>
-      <div class="place-sub">${sidoFull(sido)}</div>
-      <p class="empty">최근 12개월 이 지역의 아파트 매매 실거래가 없습니다.</p>`;
-    return;
-  }
-  curPanel = {sido, sgg, R, dj: true};
-  renderDjPanel(sido, sgg, R);
-  if (window.matchMedia('(max-width:860px)').matches)
-    $('panel').scrollIntoView({behavior: 'smooth', block: 'start'});
-
-  const items = [];
-  const L = R.leader;
-  if (L && L.loc) items.push({loc: L.loc, cls: 'lead', k: 1.35, id: 'dj-lead',
-    title: `대장 · ${L.name} · ${fmtPpy(L.ppy)}`});
-  if (R.top && R.top.loc) items.push({loc: R.top.loc, cls: 'top', k: 1, id: 'dj-top',
-    title: `최고가 · ${R.top.name} · ${fmtPpy(R.top.ppy)}`});
-  (R.dongs || []).forEach((d, i) => {
-    const x = d.leader;
-    if (x && x.loc && !(L && x.name === L.name && x.dong === L.dong))
-      items.push({loc: x.loc, cls: 'dl', k: 0.8, id: `dj-d-${i}`,
-        title: `${d.dong} 대장 · ${x.name} · ${fmtPpy(x.ppy)}`});
-  });
-  (R.cand || []).forEach((c, i) => {
-    if (c.loc) items.push({loc: c.loc, cls: 'cand', k: 1.05, id: `dj-c-${i}`,
-      title: `대장후보 · ${c.name}${c.silv ? ' · 분양권 ' + fmtPpy(c.silv.ppy) : ''}`});
-  });
-  drawDjMarkers(curMap, items);
-  await showEmd(sido, sgg);
-  djMarkerLegend(items, R);
-}
-
-function djMarkerLegend(items, R) {
-  const base = $('legend').innerHTML.split('<hr')[0];
-  const has = (c) => items.some((x) => x.cls === c);
-  const parts = [];
-  if (has('lead')) parts.push('<span><i style="background:var(--ochre)"></i>대장</span>');
-  if (has('top')) parts.push('<span><i style="background:var(--muted)"></i>기준 밖 최고가</span>');
-  if (has('dl')) parts.push('<span><i style="background:var(--blue)"></i>법정동 대장</span>');
-  if (has('cand')) parts.push('<span><i style="border:2px solid var(--blue);width:6px;height:6px"></i>대장후보(미준공)</span>');
-  const svg = $('mapbox').querySelector('svg');
-  const emd = svg && svg.querySelector('g.emd');
-  $('legend').innerHTML = base +
-    `<hr style="border:0;border-top:1px solid var(--rule);margin:10px 0 8px">
-     ${parts.length ? `<div class="mk-lg">${parts.join('')}</div>` : ''}
-     ${emd && R.dongs ? `<div style="margin-top:6px">가는 선: 행정동 경계 — 누르면 해당
-       법정동만 표에 남깁니다</div>` : ''}
-     ${parts.length ? `<div style="margin-top:5px">위치는 도로명·지번 주소 기준입니다.</div>` : ''}`;
-}
-
-function drawDjMarkers(m, items) {
-  const svg = $('mapbox').querySelector('svg');
-  if (!svg || !m || !m.proj) return 0;
-  const old = svg.querySelector('g.mks');
-  if (old) old.remove();
-  const p = m.proj;
-  const spots = {};
-  for (const it of items) {
-    const x = (it.loc[1] * p.cos - p.sx0) * p.scale;
-    const y = p.h - (it.loc[0] - p.minLat) * p.scale;
-    const key = x.toFixed(0) + ':' + y.toFixed(0);
-    (spots[key] = spots[key] || {x, y, list: []}).list.push(it);
-  }
-  const parts = [], acts = {};
-  let n = 0;
-  for (const s of Object.values(spots)) {
-    s.list.forEach((it, i) => {
-      const pid = 'pk' + (n++);
-      acts[pid] = it;
-      parts.push(`<g class="pin" data-x="${s.x.toFixed(1)}" data-y="${s.y.toFixed(1)}"
-        data-i="${i}" data-n="${s.list.length}" data-pk="${pid}" role="button" tabindex="0">
-        <title>${esc(it.title)}</title>
-        <circle class="hit" r="9" fill="transparent"></circle>
-        <circle class="dot ${it.cls}" data-k="${it.k}" r="4"></circle></g>`);
-    });
-  }
-  if (!n) return 0;
-  const g = document.createElementNS(NS, 'g');
-  g.setAttribute('class', 'mks');
-  // 대장 점이 맨 위에 오게 순서를 뒤집어 그린다
-  g.innerHTML = parts.reverse().join('');
-  svg.appendChild(g);
-  g.querySelectorAll('g.pin').forEach((el) => {
-    const it = acts[el.dataset.pk];
-    const go = () => it.go ? it.go() : djFocus(it.id);
-    el.addEventListener('click', go);
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
-  });
-  sizeMarkers();
-  return n;
-}
-
-function djFocus(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.scrollIntoView({behavior: 'smooth', block: 'center'});
-  el.classList.add('flash');
-  setTimeout(() => el.classList.remove('flash'), 1400);
-}
-
-function djTags(c) {
-  const t = [];
-  if (c.brand) t.push(`<span class="tag brand" title="${esc(c.brandCo || '')}">${esc(c.brand)}</span>`);
-  if (c.hi) t.push('<span class="tag hi">하이엔드</span>');
-  return t.join('');
-}
-
-function hhText(c) {
-  if (c.hh) return `${fmt(c.hh)}세대${c.hhSrc === '조사' ? ' <span style="color:var(--muted)">(조사)</span>' : ''}`;
-  if (c.hhSrc === '거래량 대용') return `세대수 미확인 <span style="color:var(--muted)">(연 거래 ${c.n}건)</span>`;
-  return '세대수 미확인';
-}
-
-function leadCard(c, kind, R) {
-  const st = R.stats;
-  const age = c.age != null ? `${c.by}년 준공 (${c.age <= 0 ? '신축' : c.age + '년차'})` : '';
-  const where = [c.gu, c.dong, c.jibun].filter(Boolean).join(' ') +
-    (c.road ? ` · ${esc(c.road)}` : '');
-  const tags = djTags(c) +
-    (kind === 'lead' && c.tier > 0 ? `<span class="tag relax">완화 기준: ${esc(c.tierText)}</span>` : '') +
-    (kind === 'lead' && c.tier === 0 ? `<span class="tag">${esc(c.tierText)}</span>` : '');
-  const lead = kind === 'lead' && c.lead
-    ? `<dt>위상</dt><dd>이 지역 ${fmt(c.of)}개 단지 중 시세 ${c.rank}위 · 평균의
-        <b class="num">${c.lead.toFixed(2)}배</b></dd>` : '';
-  return `<div class="lead${kind === 'top' ? ' alt' : ''}" id="${kind === 'top' ? 'dj-top' : 'dj-lead'}">
-    <div class="nt-hd"><span class="nm">${esc(c.name)}</span></div>
-    <div class="tags">${tags}</div>
-    <dl class="kv">
-      <dt>시세</dt><dd><span class="big num">${fmtPpy(c.ppy)}</span>
-        <span style="color:var(--muted)"> 평당 (공급면적${c.supSrc === '공고' ? ', 분양공고 면적' : ', 평형 환산'})</span>
-        · 전용84㎡ <b class="num">${fmtWon(c.p84)}</b>${c.p84est ? ' <span style="color:var(--muted)">(환산)</span>' : ''}</dd>
-      ${lead}
-      <dt>규모</dt><dd>${hhText(c)}${age ? ' · ' + age : ''}${c.builder ? ' · ' + esc(c.builder) : ''}</dd>
-      <dt>위치</dt><dd>${esc(where)}</dd>
-      <dt>거래</dt><dd class="num">최근 12개월 ${c.n}건 · 최근 ${c.last.d} ${fmtWon(c.last.amt)}
-        (${c.last.ar}㎡ ${c.last.fl ?? '–'}층) · 최고 ${fmtWon(c.max.amt)} (${c.max.ar}㎡)</dd>
-    </dl></div>`;
-}
-
-function renderDjPanel(sido, sgg, R, dong) {
-  const M = DJ.meta, st = R.stats, L = R.leader;
-  let h = `<h2 class="place">${sgg}</h2>
-    <div class="place-sub">${sidoFull(sido)} · 최근 12개월 매매 실거래 ${fmt(st.n)}건</div>` +
-    djFigs([
-      ['평균 시세', fmtPpy(st.avg), '', '', '공급면적 평당가 · 거래 평균'],
-      ['전용84㎡ 중위가', fmtWon(st.p84), '', '', st.n84 ? `${fmt(st.n84)}건 기준` : ''],
-      ['매매 거래', fmt(st.n), '건', '', `${M.from} ~ ${M.to}`],
-      ['대장 시세', L ? fmtPpy(L.ppy) : '–', '', 'ochre', L ? esc(L.name) : '기준 충족 단지 없음'],
-      ['평균 대비', L && L.lead ? L.lead.toFixed(2) : '–', L ? '배' : '', 'ochre', ''],
-      ['대장 기준', L ? (L.tier ? '완화' : '정규') : '–', '', '',
-        L ? esc(L.tierText) : esc((R.tiers || [])[0] || '')],
-    ]);
-
-  h += `<h3>대장아파트 <span>${esc((R.tiers || [])[0])} 중 평당가 1위</span></h3>`;
-  h += L ? leadCard(L, 'lead', R)
-    : `<p class="empty" style="margin-top:14px">기준을 끝까지 완화해도(${esc((R.tiers || []).slice(-1)[0])})
-        해당하는 단지가 없습니다.</p>`;
-  if (R.top) {
-    h += `<p style="margin:14px 0 0;font-size:13px;color:var(--muted)">기준과 상관없이 평당
-      시세가 가장 높은 단지는 따로 있습니다. 재건축을 앞둔 구축이나 소단지인 경우가 많습니다.</p>`;
-    h += leadCard(R.top, 'top', R);
-  }
-
-  const cand = R.cand || [];
-  if (cand.length) {
-    const main = cand.filter((c) => !c.auto), extra = cand.filter((c) => c.auto);
-    h += `<h3>대장후보 <span>미준공·입주 초기 프리미엄 대단지</span></h3>`;
-    h += main.map((c, i) => candCard(c, i, L)).join('');
-    if (extra.length) h += `<details class="yr"><summary><b>그 밖의 분양권 거래 브랜드 단지</b>
-        <span class="num">${extra.length}곳</span><i>세대수 미확인</i></summary>
-        ${extra.map((c, i) => candCard(c, main.length + i, L)).join('')}</details>`;
-  }
-
-  const nt = R.newTop || [];
-  if (nt.length) {
-    h += `<h3>신축 시세 상위 <span>준공 10년 이내 · 평당가 순</span></h3>
-      <div class="tw"><table><thead><tr><th>단지</th><th>법정동</th><th>준공</th>
-      <th>세대</th><th>평당가</th><th>전용84㎡</th><th>거래</th></tr></thead><tbody>` +
-      nt.map((c) => `<tr><td class="l"><b>${esc(c.name)}</b> ${djTags(c)}</td>
-        <td>${esc(c.dong)}</td><td class="num">${c.by ?? '–'}</td>
-        <td class="num">${c.hh ? fmt(c.hh) : '–'}</td>
-        <td class="num">${fmtPpy(c.ppy)}</td>
-        <td class="num">${fmtWon(c.p84)}${c.p84est ? '*' : ''}</td>
-        <td class="num">${c.n}</td></tr>`).join('') + `</tbody></table></div>`;
-  }
-
-  if (R.dongs && R.dongs.length) {
-    const alias = dong ? dongAliases(dong) : null;
-    const list = alias ? R.dongs.filter((d) => alias.includes(d.dong)) : R.dongs;
-    h += `<h3>법정동별 대장 <span>평균 시세 높은 순</span></h3>`;
-    if (dong) h += `<div class="dongbar" style="margin:12px 0 0"><b>${esc(dong)}</b>
-        <span>행정동 → 법정동 ${list.length ? list.map((d) => esc(d.dong)).join('·') : '대응 없음'}</span>
-        <button id="alldong">${sgg} 전체</button></div>`;
-    h += `<div class="tw"><table><thead><tr><th>법정동</th><th>평균 시세</th><th>거래</th>
-      <th>대장</th><th>세대</th><th>준공</th><th>대장 시세</th></tr></thead><tbody>` +
-      (list.length ? list.map((d) => {
-        const x = d.leader, i = R.dongs.indexOf(d);
-        return `<tr class="dj-row" id="dj-d-${i}"><td><b>${esc(d.dong)}</b></td>
-          <td class="num">${fmtPpy(d.stats.avg)}</td><td class="num">${fmt(d.stats.n)}</td>
-          <td class="l">${x ? `${esc(x.name)} ${djTags(x)}${x.tier ? ' <span class="tag relax" title="' + esc(x.tierText) + '">완화</span>' : ''}` : '<span style="color:var(--muted)">기준 충족 없음</span>'}</td>
-          <td class="num">${x && x.hh ? fmt(x.hh) : '–'}</td>
-          <td class="num">${x ? x.by : '–'}</td>
-          <td class="num">${x ? fmtPpy(x.ppy) : '–'}</td></tr>`;
-      }).join('') : `<tr><td colspan="7" class="l" style="color:var(--muted)">
-          고른 행정동에 대응하는 법정동 거래가 없습니다.</td></tr>`) +
-      `</tbody></table></div>
-      <p style="font-size:12px;color:var(--muted);margin-top:6px">법정동 대장 기준:
-      ${esc(R.dongs[0] && R.dongs[0].tiers ? R.dongs[0].tiers.join(' → ') : '')} 순으로 완화.</p>`;
-  }
-
-  h += djFoot(true);
-  $('panel').innerHTML = h;
-  const back = $('alldong');
-  if (back) back.onclick = () => pickDong(dong);
-}
-
-function candCard(c, i, L) {
-  const s = c.silv;
-  let cmp = '';
-  if (s && L && L.ppy) {
-    const r = s.ppy / L.ppy;
-    cmp = `<span class="cmp${r >= 1 ? ' up' : ''}">현 대장의 ${Math.round(r * 100)}%</span>`;
-  }
-  const mv = c.moveIn ? `${c.moveIn.slice(0, 4)}년 ${+c.moveIn.slice(5, 7)}월 입주${c.status === '입주중' ? ' 시작' : ' 예정'}` : '';
-  return `<div class="cand" id="dj-c-${i}">
-    <div class="nt-hd"><span class="nm">${esc(c.name)}</span></div>
-    <div class="tags" style="margin-top:4px"><span class="tag st">${esc(c.status || '')}</span>${djTags(c)}</div>
-    <div class="nt-meta">${[esc(c.gu) + ' ' + esc(c.dong), c.hh ? fmt(c.hh) + '세대' : '세대수 미확인',
-      c.builder ? esc(c.builder) : '', mv].filter(Boolean).join(' · ')}${c.note ? ' · ' + esc(c.note) : ''}</div>
-    <div class="row">
-      ${s ? `<span>분양권·입주권 <b class="num">${fmtPpy(s.ppy)}</b> /평 · 전용84㎡ <b class="num">${fmtWon(s.p84)}</b>${s.p84est ? '(환산)' : ''}
-        <span style="color:var(--muted)">(${s.n}건, 최근 ${s.last.d})</span> ${cmp}</span>`
-        : '<span style="color:var(--muted)">최근 12개월 분양권·입주권 거래 없음</span>'}
-      ${c.sale84 ? `<span>84㎡ 분양가 <b class="num">${fmtWon(c.sale84)}</b>
-        <span style="color:var(--muted)">(${c.saleDate} 공고, 최고가)</span></span>` : ''}
-      ${c.srcUrl ? `<a href="${esc(c.srcUrl)}" target="_blank" rel="noopener">세대수 출처</a>` : ''}
-    </div></div>`;
-}
-
-function djFoot(detail) {
-  const M = DJ.meta;
-  const warn = [];
-  if (M.kapt && M.kapt !== 'ok') warn.push(`K-apt 세대수 조회를 쓰지 못해(${esc(M.kapt)})
-    거래량을 대단지 대용 지표로 썼습니다.`);
-  if (M.partial) warn.push(`실거래 수집이 중간에 멈춰 일부 지역이 빠졌을 수 있습니다 (${esc(M.partial)}).`);
-  return `<div class="foot">
-    시세는 국토교통부 아파트 매매 실거래가(공공데이터포털) ${M.from} ~ ${M.to} 계약분이며
-    해제 거래와 직거래는 뺐습니다. 시세는 공급면적 평당가(3.3㎡당)입니다. 실거래 자료에는
-    전용면적만 있어, 청약홈 분양공고에 주택형별 공급면적이 있는 단지는 그 비율을 쓰고
-    나머지는 평형별 통상 비율(전용 59㎡≈25평, 84㎡≈34평, 114㎡≈44평)로 환산했습니다.
-    환산 단지는 실제 공급면적과 몇 % 차이가 날 수 있습니다. 단지 시세는 최근 6개월
-    거래가 3건 이상이면 그 기간의, 아니면 12개월 전체의 중위값입니다. 전용84㎡는 전용
-    80~90㎡ 거래의 중위 거래가이며, 해당 평형 거래가 없으면 평당가로 환산했습니다(*).
-    ${detail ? `대장은 연식·세대수 기준을 통과한 단지 중 평당가 1위이고, 브랜드는
-    표시만 합니다. 기준을 통과한 단지가 없으면 단계적으로 완화하고 '완화'로 표시합니다.
-    세대수는 공동주택관리정보시스템(K-apt)과, 신축·미준공 단지는 언론 보도를 확인한
-    조사값입니다. 대장후보 시세는 분양권·입주권 실거래(국토교통부)입니다.` : ''}
-    ${warn.join(' ')}
-    자료 생성 ${M.generated}.</div>`;
-}
-
-/* ── 보기 전환 ──────────────────────────── */
-function setMode(m, quiet) {
-  MODE = m;
-  try { localStorage.setItem('mode', m); } catch (e) { /* 저장 못 해도 그만 */ }
-  $('m-cy').classList.toggle('on', m === 'cy');
-  $('m-dj').classList.toggle('on', m === 'dj');
-  $('m-cy').setAttribute('aria-selected', m === 'cy');
-  $('m-dj').setAttribute('aria-selected', m === 'dj');
-  $('ttl').textContent = m === 'dj' ? '지역별 대장아파트' : '시군구 청약·미분양 조회';
-  document.title = $('ttl').textContent;
-  srcLine();
-  if (quiet) return;
-  const v = {...view};
-  (async () => {
-    if (!v.sido) return showNational();
-    await showSido(v.sido);
-    if (v.sgg && view.sgg !== v.sgg) await showSgg(v.sido, v.sgg);
-  })();
-}
-
-function srcLine() {
-  if (MODE === 'dj') {
-    $('src').innerHTML = DJ
-      ? `매매 실거래 국토교통부 · ${DJ.meta.from} ~ ${DJ.meta.to}
-         <br>거래 ${fmt(DJ.meta.trades)}건 · 시세는 공급면적 평당가`
-      : '매매 실거래 국토교통부';
-    if (!DJ) ensureDj().then(srcLine).catch(() => {});
-    return;
-  }
-  if (!IDX) return;
-  $('src').innerHTML =
-    `청약 한국부동산원 청약홈 · 미분양 국토교통부 ${ym(IDX.meta.unsoldBaseYm)} 기준
-     <br>최근 3년 아파트 공고 ${fmt(IDX.meta.noticeCount)}건`;
-}
-$('m-cy').onclick = () => MODE !== 'cy' && setMode('cy');
-$('m-dj').onclick = () => MODE !== 'dj' && setMode('dj');
+const cache = {sgg:{}, emd:{}, region:{}, dj:{}};
+let IDX = null, DJI = null, SIDO = null;
+let view = {sido: null, sgg: null, dong: null};
+let LAYER = {cy: true, un: true, dj: true};
+let MAP = null, ready = false;
 
 const SLUG = {서울:'seoul',부산:'busan',대구:'daegu',인천:'incheon',
   대전:'daejeon',울산:'ulsan',세종:'sejong',경기:'gyeonggi',강원:'gangwon',
@@ -1455,22 +239,701 @@ const SIDO_FULL = {서울:'서울특별시',부산:'부산광역시',대구:'대
   전북:'전북특별자치도',전남광주:'전남광주통합특별시',경북:'경상북도',
   경남:'경상남도',제주:'제주특별자치도'};
 const sidoFull = (s) => SIDO_FULL[s] || s;
+const fmt = (n) => n == null ? '–' : n.toLocaleString('ko-KR');
 const ym = (s) => s ? `${s.slice(0, 4)}년 ${+s.slice(4)}월` : '';
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g,
+  (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+async function grab(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url} 를 불러오지 못했습니다 (${r.status})`);
+  return r.json();
+}
+const sggGeo = (s) => cache.sgg[s] || (cache.sgg[s] = grab(`geo/sgg/${SLUG[s]}.json`));
+const emdGeo = (s) => cache.emd[s] || (cache.emd[s] = grab(`geo/emd/${SLUG[s]}.json`));
+const regionOf = (s) => cache.region[s] || (cache.region[s] = grab(`region/${SLUG[s]}.json`));
+const djOf = (s) => cache.dj[s] || (cache.dj[s] = grab(`daejang/${SLUG[s]}.json`));
+
+/* ──────────────────────────────────────────────────────────────
+   준공후 미분양 추정
+   공식 자료는 시군구 집계뿐이라 단지를 짚어주지 못한다. 그래서
+   세 조건을 모두 만족하는 공고를 '추정'으로 표시한다.
+     1) 입주예정월이 이미 지났다 (준공했을 것)
+     2) 청약에서 미달 타입이 있었다
+     3) 그 시군구의 준공후 미분양 통계가 0호가 아니다
+   3번이 헛다리를 크게 줄인다. 통계상 한 채도 없는 지역이면
+   아무리 미달이었어도 지금은 팔렸다는 뜻이기 때문이다.
+   ────────────────────────────────────────────────────────────── */
+function estUnsold(R) {
+  const after = R && R.unsold && R.unsold.after;
+  if (!after) return [];
+  const d = new Date();
+  const now = d.getFullYear() * 100 + (d.getMonth() + 1);
+  return (R.notices || []).filter((n) =>
+    n.moveIn && +n.moveIn <= now && n.types.some((t) => t.result === '미달'));
+}
+
+/* 대장아파트 화면에 찍을 단지들. 대장 하나만 찍으면 허전해서
+   같은 지역의 최고가 단지와 대장후보(분양권)까지 같이 올린다. */
+function djPins(D) {
+  const out = [];
+  const add = (c, kind) => {
+    if (c && c.loc) out.push(Object.assign({}, c, {kind}));
+  };
+  add(D.leader, 'leader');
+  if (D.top && (!D.leader || D.top.name !== D.leader.name)) add(D.top, 'top');
+  for (const c of D.cand || []) add(c, 'cand');
+  return out;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   지도
+   ────────────────────────────────────────────────────────────── */
+const KAKAO_KEY = '368b3da5034cf7392bf2390b9f8d1ebe';
+const NAT_CENTER = [36.3, 127.8], NAT_LEVEL = 13;
+/* 확대 정도로 어느 경계를 보여줄지 정한다. 카카오맵 level 은
+   숫자가 작을수록 가깝다. */
+const LV_SGG = 11;      // 이보다 가까우면 시군구 경계
+const LV_EMD = 7;       // 이보다 가까우면 읍면동 경계
+let polys = [], labels = [], pins = [];
+let autoMoving = false;  // 우리가 옮기는 중인지 (idle 처리를 건너뛰려고)
+
+function loadSdk() {
+  return new Promise((ok, no) => {
+    const s = document.createElement('script');
+    s.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+    s.onload = () => window.kakao.maps.load(ok);
+    s.onerror = () => no(new Error('카카오맵 스크립트를 불러오지 못했습니다'));
+    document.head.appendChild(s);
+  });
+}
+
+function clearOverlays() {
+  polys.forEach((p) => p.setMap(null));
+  labels.forEach((l) => l.setMap(null));
+  polys = []; labels = [];
+}
+function clearPins() {
+  pins.forEach((p) => p.ov.setMap(null));
+  pins = [];
+  for (const k of ['cy', 'un', 'dj']) $('n-' + k).textContent = '';
+}
+
+function bounds(box) {
+  const b = new kakao.maps.LatLngBounds();
+  b.extend(new kakao.maps.LatLng(box[0], box[1]));
+  b.extend(new kakao.maps.LatLng(box[2], box[3]));
+  return b;
+}
+
+function fitTo(box) {
+  autoMoving = true;
+  MAP.setBounds(bounds(box));
+  // setBounds 는 바로 끝나지만 idle 이 뒤따라 온다. 그 한 번만 건너뛴다.
+  setTimeout(() => { autoMoving = false; }, 60);
+}
+
+/* 경계 하나를 그린다. rings 가 여럿이면 섬마다 따로 만든다. */
+function drawShape(rec, style, onClick, onOver) {
+  const made = [];
+  for (const ring of rec.rings) {
+    const path = ring.map((p) => new kakao.maps.LatLng(p[0], p[1]));
+    const poly = new kakao.maps.Polygon(Object.assign({path}, style));
+    poly.setMap(MAP);
+    if (onClick) kakao.maps.event.addListener(poly, 'click', onClick);
+    if (onOver) {
+      kakao.maps.event.addListener(poly, 'mouseover',
+        () => made.forEach((p) => p.setOptions({fillOpacity: style.fillOpacity + .18})));
+      kakao.maps.event.addListener(poly, 'mouseout',
+        () => made.forEach((p) => p.setOptions({fillOpacity: style.fillOpacity})));
+    }
+    made.push(poly);
+    polys.push(poly);
+  }
+  return made;
+}
+
+function putLabel(latlng, text, small) {
+  const el = document.createElement('div');
+  el.className = 'plab' + (small ? ' sm' : '');
+  el.textContent = text;
+  const ov = new kakao.maps.CustomOverlay({
+    position: new kakao.maps.LatLng(latlng[0], latlng[1]),
+    content: el, yAnchor: .5, xAnchor: .5, zIndex: 2, clickable: false});
+  ov.setMap(MAP);
+  labels.push(ov);
+}
+
+/* zIndex 를 못박는다. 시군구 위에 읍면동이 겹쳐 그려지는데, 순서를
+   운에 맡기면 안쪽 경계를 눌러도 바깥 경계가 먼저 받는다. */
+const FILL = {
+  sido: {zIndex: 1, strokeWeight: 2, strokeColor: '#5a6150', strokeOpacity: .85,
+         fillColor: '#8a9280', fillOpacity: .10},
+  sgg:  {zIndex: 2, strokeWeight: 2, strokeColor: '#4a5142', strokeOpacity: .8,
+         fillColor: '#8a9280', fillOpacity: .08},
+  sel:  {zIndex: 2, strokeWeight: 3, strokeColor: '#2c4a7c', strokeOpacity: .95,
+         fillColor: '#2c4a7c', fillOpacity: .06},
+  emd:  {zIndex: 3, strokeWeight: 1, strokeColor: '#191c18', strokeOpacity: .35,
+         fillColor: '#2c4a7c', fillOpacity: .02},
+  emdSel:{zIndex: 4, strokeWeight: 2.5, strokeColor: '#2c4a7c', strokeOpacity: .95,
+         fillColor: '#2c4a7c', fillOpacity: .16},
+};
+
+/* 지금 상태에 맞는 경계를 다시 그린다. */
+async function drawBoundaries() {
+  if (!ready) return;
+  clearOverlays();
+  const lv = MAP.getLevel();
+
+  if (!view.sido || lv > LV_SGG) {
+    for (const [name, rec] of Object.entries(SIDO)) {
+      drawShape(rec, FILL.sido, () => enterSido(name), true);
+      if (rec.label) putLabel(rec.label, name);
+    }
+    return;
+  }
+
+  const sgg = await sggGeo(view.sido);
+  for (const [name, rec] of Object.entries(sgg)) {
+    const on = name === view.sgg;
+    drawShape(rec, on ? FILL.sel : FILL.sgg, () => enterSgg(view.sido, name), !on);
+    if (rec.label) putLabel(rec.label, name, Object.keys(sgg).length > 18);
+  }
+
+  if (view.sgg && lv <= LV_EMD) {
+    try {
+      const emd = (await emdGeo(view.sido))[view.sgg];
+      if (emd) for (const [dn, rec] of Object.entries(emd)) {
+        drawShape(rec, dn === view.dong ? FILL.emdSel : FILL.emd,
+          () => pickDong(dn), dn !== view.dong);
+        if (rec.label) putLabel(rec.label, dn, true);
+      }
+    } catch (e) { /* 읍면동이 없는 지역은 그냥 넘어간다 */ }
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   단지 표시
+   ────────────────────────────────────────────────────────────── */
+function pinEl(cls, title) {
+  const el = document.createElement('div');
+  el.className = 'pin ' + cls;
+  el.title = title;
+  return el;
+}
+
+function addPin(loc, cls, title, onClick, key) {
+  const el = pinEl(cls, title);
+  el.addEventListener('click', onClick);
+  const ov = new kakao.maps.CustomOverlay({
+    position: new kakao.maps.LatLng(loc[0], loc[1]),
+    content: el, yAnchor: .5, xAnchor: .5, zIndex: 5, clickable: true});
+  ov.setMap(MAP);
+  pins.push({ov, el, key});
+}
+
+async function drawPins() {
+  if (!ready || !view.sido) { clearPins(); return; }
+  clearPins();
+  const counts = {cy: 0, un: 0, dj: 0};
+
+  const R = await regionOf(view.sido);
+  const only = view.sgg;                       // 시군구를 골랐으면 그 안만
+  const gus = only ? [only] : Object.keys(R);
+
+  for (const g of gus) {
+    const rec = R[g]; if (!rec) continue;
+    const est = new Set(estUnsold(rec).map((n) => n.id));
+
+    for (const n of rec.notices || []) {
+      if (!n.loc) continue;
+      const isUn = est.has(n.id);
+      if (isUn) {
+        counts.un++;
+        if (LAYER.un)
+          addPin(n.loc, 'un', `${n.name} · 준공후 미분양 추정`,
+            () => focusCard('un-' + n.id), 'un-' + n.id);
+      }
+      // 미분양 추정으로 찍은 단지는 청약 점으로 또 찍지 않는다
+      if (isUn && LAYER.un) continue;
+      counts.cy++;
+      if (LAYER.cy) {
+        const k = n.closedTypes ? 'cy-close' : n.ratedTypes ? 'cy-short' : 'cy-none';
+        const r = n.closedTypes ? '마감 포함' : n.ratedTypes ? '전 타입 미달' : '결과 미공개';
+        addPin(n.loc, k, `${n.name} · ${n.noticeDate} · ${r}`,
+          () => focusCard('nt-' + n.id), 'nt-' + n.id);
+      }
+    }
+  }
+
+  try {
+    const D = await djOf(view.sido);
+    for (const g of gus) {
+      if (!D[g]) continue;
+      for (const c of djPins(D[g])) {
+        counts.dj++;
+        if (!LAYER.dj) continue;
+        const id = 'dj-' + g + '-' + c.name;
+        addPin(c.loc, 'dj' + (c.kind === 'cand' ? ' cand' : ''),
+          `${c.name} · ${c.kind === 'leader' ? '대장' : c.kind === 'cand' ? '대장후보' : '최고가'}`,
+          () => focusCard(id), id);
+      }
+    }
+  } catch (e) { /* 대장 자료가 없는 시도는 넘어간다 */ }
+
+  $('n-cy').textContent = counts.cy ? ` ${counts.cy}` : '';
+  $('n-un').textContent = counts.un ? ` ${counts.un}` : '';
+  $('n-dj').textContent = counts.dj ? ` ${counts.dj}` : '';
+  dimPins();
+}
+
+/* 읍면동을 고르면 그 안에 없는 점을 흐리게 한다. */
+function dimPins() {
+  const keep = view.dong ? dongKeys() : null;
+  pins.forEach((p) => p.el.classList.toggle('dim', !!keep && !keep.has(p.key)));
+}
+
+function focusCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({behavior: 'smooth', block: 'center'});
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1400);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   이동
+   ────────────────────────────────────────────────────────────── */
+async function enterSido(name) {
+  view = {sido: name, sgg: null, dong: null};
+  fitTo(SIDO[name].box);
+  crumb();
+  await drawBoundaries();
+  await drawPins();
+  renderSido(name);
+}
+
+async function enterSgg(sido, sgg) {
+  view = {sido, sgg, dong: null};
+  const g = await sggGeo(sido);
+  if (g[sgg] && g[sgg].box) fitTo(g[sgg].box);
+  crumb();
+  await drawBoundaries();
+  await drawPins();
+  renderSgg(sido, sgg);
+}
+
+async function goNational() {
+  view = {sido: null, sgg: null, dong: null};
+  autoMoving = true;
+  MAP.setCenter(new kakao.maps.LatLng(NAT_CENTER[0], NAT_CENTER[1]));
+  MAP.setLevel(NAT_LEVEL);
+  setTimeout(() => { autoMoving = false; }, 60);
+  crumb();
+  clearPins();
+  await drawBoundaries();
+  renderNational();
+}
+
+function pickDong(name) {
+  view.dong = view.dong === name ? null : name;
+  drawBoundaries();
+  dimPins();
+  if (curPanel) renderSgg(curPanel.sido, curPanel.sgg);
+}
+
+function crumb() {
+  const c = [];
+  if (view.sido) c.push('<button id="c-nat">전국</button>');
+  else c.push('<b>전국</b><span>지역을 누르거나 확대하세요</span>');
+  if (view.sido) {
+    if (view.sgg) c.push(`<button id="c-sido">${sidoFull(view.sido)}</button>`);
+    else c.push(`<b>${sidoFull(view.sido)}</b><span>시·군·구를 고르세요</span>`);
+  }
+  if (view.sgg) c.push(`<b>${view.sgg}</b>`);
+  $('crumb').innerHTML = c.join('');
+  if ($('c-nat')) $('c-nat').onclick = goNational;
+  if ($('c-sido')) $('c-sido').onclick = () => enterSido(view.sido);
+}
+
+/* 확대·이동이 끝나면 배율에 맞는 경계로 알아서 바꾼다. */
+let idleTimer = null;
+function onIdle() {
+  if (autoMoving) return;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    const lv = MAP.getLevel();
+    if (lv > LV_SGG && view.sido) {        // 많이 빼면 전국으로
+      view = {sido: null, sgg: null, dong: null};
+      crumb(); clearPins(); await drawBoundaries(); renderNational();
+      return;
+    }
+    const c = MAP.getCenter();
+    if (lv <= LV_SGG && !view.sido) {      // 당기면 가운데 시도로 들어간다
+      const hit = whichSido(c.getLat(), c.getLng());
+      if (hit) {
+        view = {sido: hit, sgg: null, dong: null};
+        crumb(); await drawBoundaries(); await drawPins(); renderSido(hit);
+        return;
+      }
+    }
+    // 더 당기면 가운데 시군구까지. 클릭하지 않고 확대만 해도 들어간다.
+    if (lv <= LV_EMD && view.sido && !view.sgg) {
+      const g = await sggGeo(view.sido);
+      const hit = Object.keys(g).find((k) => inRings(g[k].rings, c.getLat(), c.getLng()));
+      if (hit) {
+        view = {sido: view.sido, sgg: hit, dong: null};
+        crumb(); await drawBoundaries(); await drawPins();
+        renderSgg(view.sido, hit);
+        return;
+      }
+    }
+    await drawBoundaries();                 // 읍면동 켜짐/꺼짐만 바뀔 때
+  }, 180);
+}
+
+function inRings(rings, lat, lng) {
+  let hit = false;
+  for (const ring of rings) {
+    let c = false;
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [y1, x1] = ring[i], [y2, x2] = ring[i + 1];
+      if ((y1 > lat) !== (y2 > lat)) {
+        const xx = x1 + (lat - y1) * (x2 - x1) / (y2 - y1);
+        if (lng < xx) c = !c;
+      }
+    }
+    if (c) hit = !hit;
+  }
+  return hit;
+}
+function whichSido(lat, lng) {
+  for (const [name, rec] of Object.entries(SIDO))
+    if (inRings(rec.rings, lat, lng)) return name;
+  return null;
+}
+function dongKeys() {
+  // 고른 동 안에 들어가는 점들의 키. 경계로 직접 판정한다.
+  const keep = new Set();
+  const rec = curEmd && curEmd[view.dong];
+  if (!rec) return keep;
+  for (const p of pins) {
+    const pos = p.ov.getPosition();
+    if (inRings(rec.rings, pos.getLat(), pos.getLng())) keep.add(p.key);
+  }
+  return keep;
+}
+let curEmd = null;
+
+/* ──────────────────────────────────────────────────────────────
+   오른쪽 패널
+   ────────────────────────────────────────────────────────────── */
+let curPanel = null;
+
+function figs(list) {
+  return `<div class="figs">` + list.map(([k, v, u, c, note]) =>
+    `<div class="fig ${c || ''}"><div class="k">${k}</div>
+     <div class="v num">${v}${u ? `<span class="u">${u}</span>` : ''}</div>
+     ${note ? `<div class="note">${note}</div>` : ''}</div>`).join('') + `</div>`;
+}
+
+function renderNational() {
+  curPanel = null;
+  const M = IDX.meta;
+  const rows = Object.entries(IDX.sidoSummary).sort((a, b) => b[1].total - a[1].total);
+  const sum = (f) => rows.reduce((a, [, v]) => a + (v[f] || 0), 0);
+  $('panel').innerHTML =
+    `<h2 class="place">전국</h2>
+     <div class="place-sub">아파트 분양 공고와 미분양 현황</div>` +
+    figs([
+      ['미분양', fmt(sum('total')), '호', 'ochre', `${ym(M.unsoldBaseYm)} 기준`],
+      ['준공 후 미분양', fmt(sum('after')), '호', 'ochre',
+        `전체의 ${Math.round(sum('after') / sum('total') * 100)}%`],
+      ['청약 공고', fmt(sum('notices')), '건', '', `${M.noticeFrom} ~ ${M.noticeTo}`],
+      ['공급 세대', fmt(sum('supply')), '세대', '', ''],
+      ['미분양 상위', rows[0][0], '', 'ochre', `${fmt(rows[0][1].total)}호`],
+    ]) +
+    `<h3>시·도별 <span>미분양 많은 순</span></h3>
+     <div class="tw"><table><thead><tr>
+       <th>시·도</th><th>미분양</th><th>준공 후</th><th>공고</th><th>공급 세대</th>
+       </tr></thead><tbody>` +
+    rows.map(([s, v]) => `<tr class="pick" data-s="${s}" style="cursor:pointer">
+       <td><b>${sidoFull(s)}</b></td><td class="num">${fmt(v.total)}</td>
+       <td class="num">${fmt(v.after)}</td><td class="num">${fmt(v.notices)}</td>
+       <td class="num">${fmt(v.supply)}</td></tr>`).join('') +
+    `</tbody></table></div>
+     <p class="foot">표의 시·도를 누르거나 지도를 확대하면 그 지역으로 들어갑니다.</p>`;
+  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
+    tr.onclick = () => enterSido(tr.dataset.s));
+}
+
+async function renderSido(sido) {
+  curPanel = null;
+  $('panel').innerHTML = '<p class="spin">불러오는 중…</p>';
+  const rows = Object.entries(IDX.summary)
+    .filter(([k]) => k.split('|')[0] === sido)
+    .map(([k, v]) => [k.split('|')[1], v])
+    .sort((a, b) => b[1].unsold - a[1].unsold);
+  const v = IDX.sidoSummary[sido] || {};
+  const dj = (DJI && DJI.sidoSummary && DJI.sidoSummary[sido]) || null;
+  const djSum = (DJI && DJI.summary) || {};
+  $('panel').innerHTML =
+    `<h2 class="place">${sidoFull(sido)}</h2>
+     <div class="place-sub">시·군·구를 고르면 단지까지 보여줍니다</div>` +
+    figs([
+      ['미분양', fmt(v.total), '호', 'ochre', `${ym(IDX.meta.unsoldBaseYm)} 기준`],
+      ['준공 후 미분양', fmt(v.after), '호', 'ochre', ''],
+      ['청약 공고', fmt(v.notices), '건', '', '최근 3년'],
+      ['공급 세대', fmt(v.supply), '세대', '', ''],
+      ['평균 시세', dj && dj.avg ? fmt(dj.avg) : '–', '만원/평', '',
+        dj && dj.n ? `실거래 ${fmt(dj.n)}건` : ''],
+      ['이 시·도 대장', dj && dj.lead ? esc(dj.lead.name) : '–', '', 'ochre',
+        dj && dj.lead ? `${esc(dj.lead.sgg)} · ${fmt(dj.lead.ppy)}만원/평` : ''],
+    ]) +
+    `<h3>시·군·구별 <span>미분양 많은 순</span></h3>
+     <div class="tw"><table><thead><tr>
+       <th>시·군·구</th><th>미분양</th><th>준공 후</th><th>공고</th>
+       <th>평균 분양가</th><th>평균 시세</th>
+       </tr></thead><tbody>` +
+    rows.map(([g, s]) => {
+      const d = djSum[`${sido}|${g}`];
+      return `<tr class="pick" data-g="${esc(g)}" style="cursor:pointer">
+       <td><b>${g}</b></td><td class="num">${fmt(s.unsold)}</td>
+       <td class="num">${fmt(s.after)}</td><td class="num">${fmt(s.n)}</td>
+       <td class="num">${s.pyeong ? fmt(s.pyeong) : '–'}</td>
+       <td class="num">${d && d.avg ? fmt(d.avg) : '–'}</td></tr>`;
+    }).join('') +
+    `</tbody></table></div>
+     <p class="foot">단위는 미분양·준공 후 호, 공고 건, 분양가와 시세는 만원/평입니다.
+     분양가는 청약 공고의 주택형별 공급금액, 시세는 최근 12개월 매매 실거래
+     평균입니다.</p>`;
+  $('panel').querySelectorAll('tr.pick').forEach((tr) =>
+    tr.onclick = () => enterSgg(sido, tr.dataset.g));
+}
+
+async function renderSgg(sido, sgg) {
+  $('panel').innerHTML = '<p class="spin">불러오는 중…</p>';
+  let R, D = null;
+  try {
+    R = (await regionOf(sido))[sgg] || {notices: [], unsold: {}};
+  } catch (e) {
+    $('panel').innerHTML = `<p class="empty">${sgg} 자료를 불러오지 못했습니다. ${e.message}</p>`;
+    return;
+  }
+  try { D = (await djOf(sido))[sgg] || null; } catch (e) {}
+  try { curEmd = (await emdGeo(sido))[sgg] || null; } catch (e) { curEmd = null; }
+  curPanel = {sido, sgg, R, D};
+
+  const M = IDX.meta;
+  const all = R.notices || [];
+  const est = estUnsold(R);
+  const estIds = new Set(est.map((n) => n.id));
+  const S = IDX.summary[`${sido}|${sgg}`] || {};
+  const supply = all.reduce((a, x) => a + x.supply, 0);
+
+  let h = `<h2 class="place">${sgg}</h2>
+    <div class="place-sub">${sidoFull(sido)}</div>` +
+    figs([
+      ['미분양', fmt(R.unsold && R.unsold.total), '호', 'ochre', `${ym(M.unsoldBaseYm)} 기준`],
+      ['준공 후 미분양', fmt(R.unsold && R.unsold.after), '호', 'ochre',
+        est.length ? `추정 단지 ${est.length}곳` : ''],
+      ['청약 공고', fmt(all.length), '건', '', '최근 3년'],
+      ['공급 세대', fmt(supply), '세대', '', ''],
+      ['평균 분양가', S.pyeong ? fmt(S.pyeong) : '–', '만원/평', '', ''],
+      ['평균 시세', D && D.stats ? fmt(D.stats.med) : '–', '만원/평', '',
+        D && D.stats ? '실거래 중위' : ''],
+    ]);
+
+  if (view.dong) {
+    h += `<div class="dongbar"><b>${view.dong}</b>
+      <span>이 동만 보는 중</span>
+      <button id="alldong">${sgg} 전체</button></div>`;
+  }
+
+  // ── 준공후 미분양 (추정)
+  if (LAYER.un) {
+    h += `<h3><i class="sw un"></i>준공후 미분양 <span>추정 ${est.length}곳</span></h3>`;
+    h += est.length
+      ? est.map((n) => noticeCard(n, 'un-')).join('')
+      : `<p class="empty" style="margin-top:12px">${
+          R.unsold && R.unsold.after
+            ? '이 시·군·구에 준공후 미분양이 집계되지만, 최근 3년 청약 공고 중에서는 짚이는 단지가 없습니다.'
+            : `${ym(M.unsoldAfterBaseYm)} 기준 이 지역의 준공후 미분양은 0호입니다.`}</p>`;
+  }
+
+  // ── 대장아파트
+  if (LAYER.dj) {
+    h += `<h3><i class="sw dj"></i>대장아파트 <span>${
+      D && D.tiers ? esc(D.tiers[(D.leader && D.leader.tier) || 0] || '') : '자료 없음'}</span></h3>`;
+    if (D && D.leader) h += leadCard(D.leader, 'leader', sgg);
+    if (D && D.top && (!D.leader || D.top.name !== D.leader.name))
+      h += leadCard(D.top, 'top', sgg);
+    for (const c of (D && D.cand) || []) h += leadCard(c, 'cand', sgg);
+    if (!D) h += `<p class="empty" style="margin-top:12px">이 지역은 실거래가 적어
+      대장 판정을 하지 못했습니다.</p>`;
+  }
+
+  // ── 청약 공고
+  if (LAYER.cy) {
+    const list = all.filter((n) => !(LAYER.un && estIds.has(n.id)));
+    h += `<h3><i class="sw cy"></i>청약 공고 <span>최근 3년 ${list.length}건</span></h3>`;
+    if (!list.length) {
+      h += `<p class="empty" style="margin-top:12px">${M.noticeFrom} 이후
+        이 지역의 아파트 분양 공고가 없습니다.</p>`;
+    } else {
+      const byYear = {};
+      for (const n of list) (byYear[n.noticeDate.slice(0, 4)] ||= []).push(n);
+      h += Object.keys(byYear).sort().reverse().map((y, i) => {
+        const g = byYear[y];
+        const sup = g.reduce((a, x) => a + x.supply, 0);
+        return `<details class="yr"${i === 0 ? ' open' : ''}>
+          <summary><b>${y}년</b><span class="num">${g.length}건</span>
+            <i class="num">공급 ${fmt(sup)}세대</i></summary>
+          ${g.map((n) => noticeCard(n, 'nt-')).join('')}</details>`;
+      }).join('');
+    }
+  }
+
+  h += `<div class="foot">
+    청약 자료는 한국부동산원 청약홈(공공데이터포털), 미분양은 국토교통부
+    미분양주택현황보고(KOSIS) ${ym(M.unsoldBaseYm)} 기준입니다.
+    시세와 대장 판정은 국토교통부 아파트 매매 실거래가 최근 12개월
+    자료이며 공급면적 평당가입니다.
+    <b>준공후 미분양 단지는 추정치입니다.</b> 전국 단지별 공식 자료가 없어,
+    입주예정월이 지났고 청약에서 미달 타입이 있었으며 그 시·군·구의 준공후
+    미분양이 0호가 아닌 공고를 골라낸 것입니다. 실제 분양 상태와 다를 수
+    있으니 확인이 필요합니다.
+    자료 생성 ${M.generated}.</div>`;
+
+  $('panel').innerHTML = h;
+  if ($('alldong')) $('alldong').onclick = () => pickDong(view.dong);
+}
+
+function noticeCard(n, idp) {
+  const tags = [];
+  if (idp === 'un-') tags.push('<span class="tag est">준공후 미분양 추정</span>');
+  if (n.kind) tags.push(`<span class="tag">${esc(n.kind)}</span>`);
+  if (n.rent && n.rent !== '분양주택') tags.push(`<span class="tag">${esc(n.rent)}</span>`);
+  if (n.speculative) tags.push('<span class="tag hot">투기과열지구</span>');
+  if (n.priceCap) tags.push('<span class="tag cap">분양가상한제</span>');
+
+  const rows = n.types.map((t) => {
+    const cls = t.result === '마감' ? 'r-close' : t.result === '미달' ? 'r-short' : 'r-none';
+    const res = t.result === '마감'
+      ? `${t.closedAt} 마감 <span class="num">${t.rate}:1</span>`
+      : t.result === '미달' ? '미달' : '결과 미공개';
+    return `<tr><td>${esc(t.ty)}</td><td class="num">${t.area ?? '–'}</td>
+      <td class="num">${fmt(t.gnrl)}</td><td class="num">${fmt(t.spsply)}</td>
+      <td class="num">${t.amount ? fmt(t.amount) : '–'}</td>
+      <td class="num">${t.pyeong ? fmt(t.pyeong) : '–'}</td>
+      <td class="${cls}">${res}</td></tr>`;
+  }).join('');
+
+  const meta = [n.builder, n.totalHshld ? `${fmt(n.totalHshld)}세대` : null,
+    n.moveIn ? `${n.moveIn.slice(0, 4)}년 ${+n.moveIn.slice(4)}월 입주 예정` : null,
+    n.avgPyeong ? `평균 ${fmt(n.avgPyeong)}만원/평` : null].filter(Boolean).join(' · ');
+  const dot = n.closedTypes ? 'close' : n.ratedTypes ? 'short' : 'none';
+
+  return `<div class="nt" id="${idp}${n.id}">
+    <div class="nt-hd"><span class="nm"><span class="dot ${dot}"></span>${esc(n.name)}</span>
+      <span class="dt num">공고 ${n.noticeDate}</span></div>
+    <div class="nt-meta">${esc(meta)}</div>
+    <div class="nt-meta">${esc(n.addr || '')}</div>
+    <div class="tags">${tags.join('')}</div>
+    <div class="tw"><table><thead><tr><th>주택형</th><th>공급면적</th>
+      <th>일반</th><th>특별</th><th>분양가</th><th>평당가</th><th>청약 결과</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="lk">${n.url
+      ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">청약홈 공고 상세</a>` : ''}
+      ${n.homepage
+      ? ` · <a href="${esc(n.homepage)}" target="_blank" rel="noopener">분양 홈페이지</a>` : ''}
+    </div></div>`;
+}
+
+function leadCard(c, kind, sgg) {
+  const title = kind === 'leader' ? '대장' : kind === 'cand' ? '대장후보' : '최고 평당가';
+  const s = c.silv || c;
+  const tags = [];
+  if (c.brand) tags.push(`<span class="tag brand">${esc(c.brand)}</span>`);
+  if (c.hh) tags.push(`<span class="tag">${fmt(c.hh)}세대</span>`);
+  if (c.by) tags.push(`<span class="tag">${c.by}년</span>`);
+  if (kind === 'cand') tags.push(`<span class="tag est">${esc(c.status || '분양권')}</span>`);
+  return `<div class="lead${kind === 'leader' ? '' : ' alt'}" id="dj-${esc(sgg)}-${esc(c.name)}">
+    <div class="nt-meta">${title}</div>
+    <div class="nm">${esc(c.name)}</div>
+    <dl class="kv">
+      <dt>위치</dt><dd>${esc(c.dong || '')} ${esc(c.road || c.jibun || '')}</dd>
+      <dt>평당가</dt><dd class="big num">${s.ppy ? fmt(s.ppy) : '–'}
+        <span style="font-size:13px;font-weight:450;color:var(--muted)">만원/평</span></dd>
+      ${s.p84 ? `<dt>84㎡</dt><dd class="num">${fmt(s.p84)}만원</dd>` : ''}
+      ${s.last ? `<dt>최근</dt><dd class="num">${s.last.d} · ${fmt(s.last.amt)}만원
+        · ${s.last.ar}㎡</dd>` : ''}
+    </dl>
+    <div class="tags">${tags.join('')}</div></div>`;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   레이어 토글
+   ────────────────────────────────────────────────────────────── */
+$('layers').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-l]');
+  if (!b) return;
+  const k = b.dataset.l;
+  LAYER[k] = !LAYER[k];
+  b.classList.toggle('on', LAYER[k]);
+  b.setAttribute('aria-pressed', String(LAYER[k]));
+  drawPins();
+  if (curPanel) renderSgg(curPanel.sido, curPanel.sgg);
+});
+
+function legend() {
+  const p = [];
+  if (LAYER.cy) p.push(`<span><i style="background:var(--blue)"></i>마감 타입 있음</span>
+    <span><i style="background:var(--warn)"></i>전 타입 미달</span>
+    <span><i style="background:var(--muted)"></i>결과 미공개</span>`);
+  if (LAYER.un) p.push('<span><i class="un"></i>준공후 미분양 추정</span>');
+  if (LAYER.dj) p.push('<span><i class="dj"></i>대장·최고가 단지</span>');
+  $('legend').innerHTML = p.join('') ||
+    '<span>레이어를 하나 이상 켜주세요.</span>';
+}
+
+/* ──────────────────────────────────────────────────────────────
+   시작
+   ────────────────────────────────────────────────────────────── */
 (async function () {
   try {
-    IDX = await grab('index');
-    let saved = 'cy';
-    try { saved = localStorage.getItem('mode') || 'cy'; } catch (e) { /* 없으면 기본 */ }
-    if (location.hash === '#daejang') saved = 'dj';
-    setMode(saved === 'dj' ? 'dj' : 'cy', true);
-    await showNational();
+    [IDX, SIDO] = await Promise.all([grab('index.json'), grab('geo/sido.json')]);
+    try { DJI = await grab('daejang/index.json'); } catch (e) { DJI = null; }
+    $('src').innerHTML =
+      `청약 한국부동산원 청약홈 · 미분양 국토교통부 ${ym(IDX.meta.unsoldBaseYm)} 기준
+       <br>최근 3년 아파트 공고 ${fmt(IDX.meta.noticeCount)}건${
+         DJI ? ` · 시세 실거래 ${fmt(DJI.meta.trades)}건` : ''}`;
   } catch (e) {
-    $('panel').innerHTML = `<p class="empty">자료를 불러오지 못했습니다.
-      ${e.message}<br><br>파일을 직접 열면 브라우저가 데이터 요청을 막습니다.
-      같은 폴더에서 <code>python3 -m http.server 8000</code> 을 실행한 뒤
-      <code>http://localhost:8000</code> 으로 접속하거나,
-      standalone.html 을 여세요.</p>`;
+    $('panel').innerHTML = `<p class="empty">자료를 불러오지 못했습니다. ${esc(e.message)}
+      <br><br>같은 폴더에서 <code>python3 -m http.server 8000</code> 을 실행한 뒤
+      <code>http://localhost:8000</code> 으로 여세요.</p>`;
+    return;
+  }
+  legend();
+  renderNational();
+
+  try {
+    await loadSdk();
+    MAP = new kakao.maps.Map($('map'), {
+      center: new kakao.maps.LatLng(NAT_CENTER[0], NAT_CENTER[1]),
+      level: NAT_LEVEL});
+    MAP.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+    ready = true;
+    kakao.maps.event.addListener(MAP, 'idle', onIdle);
+    crumb();
+    await drawBoundaries();
+  } catch (e) {
+    $('map').innerHTML = `<div class="maperr">지도를 불러오지 못했습니다.
+      ${esc(e.message)}<br><br>
+      카카오 개발자 사이트에서 이 주소를 <b>플랫폼 &gt; Web</b> 에 등록했는지,
+      <b>카카오맵</b> 제품이 켜져 있는지 확인해 주세요.<br>
+      지금 주소: <code>${esc(location.origin)}</code><br><br>
+      지도 없이도 오른쪽 목록과 아래 표는 그대로 쓸 수 있습니다.</div>`;
   }
 })();
 </script>
