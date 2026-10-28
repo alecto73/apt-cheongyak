@@ -2,4 +2,6 @@
 raw/
 web/data.json
 __pycache__/
-geo/
+# 경계 원본(southkorea-maps)을 두는 저장소 루트의 geo/ 만 제외한다.
+# 앞에 / 가 없으면 web/geo/ 처럼 아래쪽 같은 이름 폴더까지 싸잡아 빠진다.
+/geo/
