@@ -542,24 +542,35 @@ async function drawBoundaries() {
   }
 }
 
-/* 스카이뷰에는 지명이 없다. HYBRID 겹침 층을 얹어야 도로·동네 이름이
-   같이 보인다. 일반지도로 돌아가면 다시 걷는다. */
+/* 스카이뷰는 둘로 나뉜다. SKYVIEW 는 위성사진만, HYBRID 는 그 위에
+   지명·도로 라벨까지 얹은 것이다. 둘 다 '기본 타입' 이어서
+   setMapTypeId 로 고른다 (addOverlayMapTypeId 는 교통정보·지적편집도
+   같은 겹침 층 전용이라 HYBRID 를 넘기면 아무 일도 하지 않는다).
+   카카오맵 본 앱에서 '스카이뷰' 를 고르면 라벨이 같이 나오므로
+   우리도 HYBRID 를 쓴다. */
 function setSky(on) {
   SKY = on;
   $('map').classList.toggle('sky', on);
-  try {
-    const H = kakao.maps.MapTypeId.HYBRID;
-    if (on) MAP.addOverlayMapTypeId(H);
-    else MAP.removeOverlayMapTypeId(H);
-  } catch (e) { /* 겹침 층을 못 쓰는 판본이면 그냥 넘어간다 */ }
 }
 
-/* 사용자가 지도/스카이뷰 단추를 누르면 경계 색을 바꿔 다시 그린다. */
+function applyMapType(on) {
+  try {
+    MAP.setMapTypeId(on ? kakao.maps.MapTypeId.HYBRID
+                        : kakao.maps.MapTypeId.ROADMAP);
+  } catch (e) {}
+}
+
+/* 지도 종류가 바뀌면 경계 색을 맞춰 다시 그린다.
+   카카오 기본 컨트롤의 '스카이뷰' 단추는 라벨 없는 SKYVIEW 를 고르므로,
+   그때마다 라벨 있는 HYBRID 로 올려준다. */
 function onMapType() {
-  let road = false;
-  try { road = MAP.getMapTypeId() === kakao.maps.MapTypeId.ROADMAP; } catch (e) {}
-  if (road === !SKY) return;          // 바뀐 게 없다
-  setSky(!road);
+  let t = null;
+  try { t = MAP.getMapTypeId(); } catch (e) { return; }
+  const K = kakao.maps.MapTypeId;
+  if (t === K.SKYVIEW) { MAP.setMapTypeId(K.HYBRID); return; }
+  const sky = (t === K.HYBRID);
+  if (sky === SKY) return;            // 바뀐 게 없다
+  setSky(sky);
   drawBoundaries();
   drawCircle();
 }
@@ -1202,7 +1213,7 @@ syncJump();
     await loadSdk();
     MAP = new kakao.maps.Map($('map'), {
       center: LL(NAT_CENTER[0], NAT_CENTER[1]), level: NAT_LEVEL,
-      mapTypeId: kakao.maps.MapTypeId.SKYVIEW});
+      mapTypeId: kakao.maps.MapTypeId.HYBRID});
     setSky(true);
     try {
       MAP.addControl(new kakao.maps.MapTypeControl(),
