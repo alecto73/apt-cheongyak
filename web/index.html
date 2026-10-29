@@ -41,8 +41,8 @@ header .src{margin-left:auto;font-size:11.5px;color:var(--muted);
 .layers button.on{color:var(--ink);border-color:var(--ink);font-weight:600}
 .layers button.on .sw{opacity:1}
 .layers button[data-l="cy"].on .sw{background:var(--blue)}
-.layers button[data-l="un"].on .sw{background:#fff;box-shadow:inset 0 0 0 3px var(--warn)}
-.layers button[data-l="dj"].on .sw{background:var(--gold);border-radius:2px}
+.layers button[data-l="un"].on .sw{background:#8c3a2b}
+.layers button[data-l="dj"].on .sw{background:var(--gold)}
 .layers button .n{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* ── 레이아웃: 지도를 크게, 정보는 좁게 ──────── */
@@ -53,7 +53,7 @@ header .src{margin-left:auto;font-size:11.5px;color:var(--muted);
   max-height:100vh;overflow:auto;padding-left:var(--pad)}
 @media(max-width:1000px){
   .wrap{grid-template-columns:1fr}
-  .right{position:static;max-height:none;border-left:0;
+  .right{position:static;max-height:none;overflow:visible;border-left:0;
     border-top:1px solid var(--rule);padding-left:var(--pad)}
 }
 
@@ -87,7 +87,17 @@ header .src{margin-left:auto;font-size:11.5px;color:var(--muted);
 .crumb button:hover{border-color:var(--ink)}
 #map{width:100%;height:calc(100vh - 170px);min-height:420px;
   background:var(--card);border:1px solid var(--rule)}
-@media(max-width:1000px){#map{height:min(70vh,560px)}}
+@media(max-width:1000px){#map{height:52vh;min-height:300px}}
+
+/* 모바일에서는 지도가 손가락 움직임을 다 가져가서 아래 정보로 내려갈
+   길이 없다. 떠 있는 단추로 지도 ↔ 정보를 오간다. */
+.jump{display:none}
+@media(max-width:1000px){
+  .jump{display:inline-flex;align-items:center;gap:6px;position:fixed;
+    right:14px;bottom:16px;z-index:300;background:var(--ink);color:var(--paper);
+    border-radius:999px;padding:10px 16px;font-size:13.5px;font-weight:600;
+    box-shadow:0 3px 12px rgba(0,0,0,.35)}
+}
 .maperr{padding:18px;color:var(--muted);font-size:13.5px;line-height:1.7}
 
 .plab{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;
@@ -95,38 +105,24 @@ header .src{margin-left:auto;font-size:11.5px;color:var(--muted);
   pointer-events:none;transform:translate(-50%,-50%)}
 .plab.sm{font-size:11px;font-weight:500;color:var(--muted)}
 
-/* ── 단지 표시: 크고 눈에 띄게 ─────────────── */
-.pin{position:relative;width:22px;height:22px;cursor:pointer;
-  transform:translate(-50%,-50%)}
-.pin .bd{position:absolute;inset:0;border-radius:50%;
-  border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
-.pin.cy-close .bd{background:var(--blue)}
-.pin.cy-short .bd{background:var(--warn)}
-.pin.cy-none  .bd{background:#8b8f86}
-.pin.un .bd{background:#fff;border-color:var(--warn);border-width:5px}
-.pin.dj .bd{background:var(--gold);border-radius:3px;transform:rotate(45deg)}
-.pin.dj.cand .bd{background:#fff;border-color:var(--gold);border-width:5px}
-.pin:hover{z-index:60}
-.pin:hover .bd{transform:scale(1.25)}
-.pin.dj:hover .bd{transform:rotate(45deg) scale(1.25)}
-.pin.sm{width:14px;height:14px}
-.pin.sm .bd{border-width:2px}
-.pin.sm.un .bd{border-width:3.5px}
-.pin.sm.dj.cand .bd{border-width:3.5px}
-.pin.dim{opacity:.22}
-.pin.sel{z-index:80}
-.pin.sel .bd{box-shadow:0 0 0 4px rgba(44,74,124,.85),0 1px 6px rgba(0,0,0,.5)}
-.pin .tag{position:absolute;left:26px;top:50%;transform:translateY(-50%);
+/* ── 단지 표시: 물방울 핀 + 속기호 ─────────── */
+.pin{position:relative;width:28px;height:38px;cursor:pointer;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));
+  transform-origin:bottom center;transition:transform .12s}
+.pin svg{display:block;position:relative;z-index:2}
+.pin:hover{z-index:60;transform:scale(1.18)}
+.pin.sm{width:20px;height:27px}
+.pin.dim{opacity:.25}
+.pin.sel{z-index:80;transform:scale(1.3);
+  filter:drop-shadow(0 0 5px rgba(44,74,124,.95)) drop-shadow(0 2px 3px rgba(0,0,0,.5))}
+.pin .tag{position:absolute;left:31px;top:13px;transform:translateY(-50%);
   font-size:11.5px;font-weight:620;white-space:nowrap;color:var(--ink);
-  background:rgba(238,239,234,.92);border:1px solid var(--rule);
-  border-radius:3px;padding:1px 5px;pointer-events:none}
+  background:rgba(238,239,234,.93);border:1px solid var(--rule);
+  border-radius:3px;padding:1px 5px;pointer-events:none;z-index:1}
+.pin.sm .tag{left:23px;top:9px;font-size:11px}
 
-.legend{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.9}
-.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;
-  vertical-align:-1px;margin-right:5px;border:2px solid #fff;
-  box-shadow:0 1px 3px rgba(0,0,0,.4)}
-.legend i.un{background:#fff;box-shadow:inset 0 0 0 3px var(--warn),0 1px 3px rgba(0,0,0,.4)}
-.legend i.dj{background:var(--gold);border-radius:2px}
+.legend{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:2.1}
+.legend svg{vertical-align:-5px;margin-right:3px}
 .legend span{margin-right:12px;white-space:nowrap;display:inline-block}
 
 /* ── 오른쪽 정보 ───────────────────────── */
@@ -149,11 +145,7 @@ h3{font-size:13px;font-weight:640;margin:22px 0 0;
   padding-bottom:6px;border-bottom:1px solid var(--rule);
   display:flex;align-items:center;gap:7px}
 h3 span{font-weight:400;color:var(--muted);font-size:12px;margin-left:auto}
-h3 .sw{width:11px;height:11px;border-radius:50%;flex:0 0 auto;
-  border:2px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.35)}
-h3 .sw.cy{background:var(--blue)}
-h3 .sw.un{background:#fff;box-shadow:inset 0 0 0 3px var(--warn)}
-h3 .sw.dj{background:var(--gold);border-radius:2px}
+h3 svg{flex:0 0 auto;vertical-align:-3px}
 
 /* 카드. 누르면 지도에서 그 자리를 짚어준다. */
 .card{padding:11px 11px 12px;border-bottom:1px solid var(--rule);
@@ -169,12 +161,7 @@ h3 .sw.dj{background:var(--gold);border-radius:2px}
 .card .meta{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.5}
 .card .big{font-size:16px;font-weight:650;color:var(--ochre);
   letter-spacing:-.02em}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;
-  vertical-align:1px;margin-right:4px}
-.dot.close{background:var(--blue)}
-.dot.short{background:var(--warn)}
-.dot.none{background:#8b8f86}
-.dot.gold{background:var(--gold);border-radius:2px}
+.card .hd svg{flex:0 0 auto;vertical-align:-3px;margin-right:2px}
 .tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .tag{font-size:11px;padding:0 6px;border-radius:2px;
   border:1px solid var(--rule);color:var(--muted)}
@@ -237,6 +224,7 @@ td.r-short{color:var(--warn)}
     <div id="map"></div>
     <div class="legend" id="legend"></div>
   </div>
+  <button class="jump" id="jump">정보 보기 ↓</button>
   <div class="right" id="panel">
     <p class="empty">지도를 확대하거나 지역을 누르면 그 지역을 보여줍니다.
       위에서 주소를 찾거나 반경을 고르면 행정구역과 상관없이
@@ -359,6 +347,50 @@ async function collect() {
   const out = [];
   for (const g of gus) if (R[g]) out.push(...itemsOf(view.sido, g, R[g], D[g]));
   return out;
+}
+
+
+/* ── 핀 그림 ────────────────────────────── */
+/* 흔히 쓰는 물방울 모양 위치 핀에 속기호를 넣는다.
+   청약은 아파트, 준공후 미분양은 우는 얼굴, 대장은 왕관. */
+const PIN_BODY = 'M14 1C7.4 1 2 6.4 2 13c0 9.2 12 24 12 24s12-14.8 12-24C26 6.4 20.6 1 14 1z';
+const COLOR = {close: '#2c4a7c', short: '#a8553a', none: '#7e837a',
+               un: '#8c3a2b', dj: '#b8860b', cand: '#c9a227'};
+
+function glyph(kind, c) {
+  if (kind === 'dj')            // 왕관
+    return `<path d="M8.4 18.1 7.1 9.6l4.1 2.9L14 7.8l2.8 4.7 4.1-2.9-1.3 8.5z"
+      fill="${c}" stroke="${c}" stroke-width=".7" stroke-linejoin="round"/>`;
+  if (kind === 'un')            // 우는 얼굴
+    return `<circle cx="11.5" cy="11.3" r="1.2" fill="${c}"/>
+      <circle cx="16.5" cy="11.3" r="1.2" fill="${c}"/>
+      <path d="M11.6 13.4s-1.5 2-1.5 2.8a1.5 1.5 0 0 0 3 0c0-.8-1.5-2.8-1.5-2.8z"
+        fill="${c}"/>
+      <path d="M11 18.1q3-2.7 6 0" fill="none" stroke="${c}"
+        stroke-width="1.7" stroke-linecap="round"/>`;
+  // 아파트 (청약)
+  return `<path d="M9.6 19.2V10.9l4.4-2.8 4.4 2.8v8.3z" fill="${c}"/>
+    <rect x="11.1" y="12.2" width="1.9" height="1.9" fill="#fff"/>
+    <rect x="15" y="12.2" width="1.9" height="1.9" fill="#fff"/>
+    <rect x="11.1" y="15.4" width="1.9" height="1.9" fill="#fff"/>
+    <rect x="15" y="15.4" width="1.9" height="1.9" fill="#fff"/>`;
+}
+
+function pinSvg(kind, tone, w) {
+  const c = COLOR[tone] || COLOR.close;
+  const h = Math.round(w * 38 / 28);
+  return `<svg viewBox="0 0 28 38" width="${w}" height="${h}" aria-hidden="true">
+    <path d="${PIN_BODY}" fill="${c}" stroke="#fff" stroke-width="2.2"/>
+    <circle cx="14" cy="13" r="8.1" fill="#fff"/>
+    ${glyph(kind, c)}</svg>`;
+}
+
+/* 단지 하나가 어떤 그림을 쓰는지 */
+function pinKind(it) {
+  if (it.kind === 'un') return ['un', 'un'];
+  if (it.kind === 'dj') return ['dj', it.sub === 'cand' ? 'cand' : 'dj'];
+  const n = it.data;
+  return ['cy', n.closedTypes ? 'close' : n.ratedTypes ? 'short' : 'none'];
 }
 
 /* ── 지도 ───────────────────────────────── */
@@ -502,19 +534,20 @@ function drawPins() {
   const shown = ITEMS.filter((it) => LAYER[it.kind]);
   // 몇 개 안 될 때만 이름표를 붙이고, 많으면 점도 줄인다.
   // 시도 전체를 볼 때 큰 점 수백 개가 서로 덮어버리기 때문이다.
-  const withName = shown.length <= 25;
+  // 이름표는 몇 개 안 될 때만. 길면 잘라서 옆 핀을 덜 덮게 한다.
+  const withName = shown.length <= 14;
   const small = shown.length > 80;
   for (const it of shown) {
+    const [k, tone] = pinKind(it);
     const el = document.createElement('div');
-    el.className = 'pin ' + (small ? 'sm ' : '') + (it.kind === 'cy'
-      ? (it.data.closedTypes ? 'cy-close' : it.data.ratedTypes ? 'cy-short' : 'cy-none')
-      : it.kind === 'un' ? 'un' : 'dj' + (it.sub === 'cand' ? ' cand' : ''));
-    el.innerHTML = '<div class="bd"></div>' +
-      (withName ? `<div class="tag">${esc(it.name)}</div>` : '');
+    el.className = 'pin' + (small ? ' sm' : '');
+    el.innerHTML = pinSvg(k, tone, small ? 20 : 28) +
+      (withName ? `<div class="tag">${esc(it.name.length > 13
+        ? it.name.slice(0, 12) + '…' : it.name)}</div>` : '');
     el.title = it.name + (it.dist != null ? ` · ${fmtDist(it.dist)}` : '');
     el.addEventListener('click', (e) => { e.stopPropagation(); select(it.id, false); });
     const ov = new kakao.maps.CustomOverlay({position: LL(it.loc[0], it.loc[1]),
-      content: el, yAnchor: .5, xAnchor: .5, zIndex: 10, clickable: true});
+      content: el, yAnchor: 1, xAnchor: .5, zIndex: 10, clickable: true});
     ov.setMap(MAP);
     pins.push({ov, el, id: it.id});
   }
@@ -538,6 +571,19 @@ function applySel() {
     c.classList.toggle('on', c.id === SEL));
 }
 
+/* 카드를 보이게 옮긴다. PC 에서는 오른쪽 칸이 제 스크롤 상자라
+   그 안에서 움직이고, 모바일에서는 칸이 길게 펼쳐져 있어 창을 움직인다.
+   scrollIntoView 하나로는 모바일에서 듣지 않는 경우가 있다. */
+function bringIntoView(el) {
+  const box = $('panel');
+  const own = getComputedStyle(box).overflowY !== 'visible' &&
+              box.scrollHeight > box.clientHeight + 4;
+  if (own) { el.scrollIntoView({behavior: 'smooth', block: 'center'}); return; }
+  const y = el.getBoundingClientRect().top + window.scrollY - window.innerHeight * .32;
+  window.scrollTo({top: Math.max(0, y), behavior: 'smooth'});
+  setTimeout(syncJump, 600);
+}
+
 /* 지도 ↔ 목록 양방향. fromCard 면 지도를 그 자리로 옮긴다. */
 function select(id, fromCard) {
   SEL = SEL === id ? null : id;
@@ -552,7 +598,7 @@ function select(id, fromCard) {
     }
     const card = document.getElementById(id);
     if (card && !fromCard) {
-      card.scrollIntoView({behavior: 'smooth', block: 'center'});
+      bringIntoView(card);
       card.classList.add('flash');
       setTimeout(() => card.classList.remove('flash'), 1200);
     }
@@ -814,19 +860,19 @@ function sections(items, ctx) {
   const by = (k) => items.filter((x) => x.kind === k);
   if (LAYER.un) {
     const u = by('un');
-    h += `<h3><i class="sw un"></i>준공후 미분양<span>추정 ${u.length}곳</span></h3>`;
+    h += `<h3>${pinSvg('un','un',15)}준공후 미분양<span>추정 ${u.length}곳</span></h3>`;
     h += u.length ? u.map(noticeCard).join('')
       : `<p class="empty">${ctx.afterNote || '해당 없음'}</p>`;
   }
   if (LAYER.dj) {
     const d = by('dj');
-    h += `<h3><i class="sw dj"></i>대장아파트<span>${d.length}곳</span></h3>`;
+    h += `<h3>${pinSvg('dj','dj',15)}대장아파트<span>${d.length}곳</span></h3>`;
     h += d.length ? d.map(djCard).join('')
       : '<p class="empty">이 범위에서는 대장 판정 자료가 없습니다.</p>';
   }
   if (LAYER.cy) {
     const c = by('cy');
-    h += `<h3><i class="sw cy"></i>청약 공고<span>최근 3년 ${c.length}건</span></h3>`;
+    h += `<h3>${pinSvg('cy','close',15)}청약 공고<span>최근 3년 ${c.length}건</span></h3>`;
     h += c.length ? c.map(noticeCard).join('')
       : '<p class="empty">최근 3년 공고가 없습니다.</p>';
   }
@@ -949,7 +995,7 @@ function distTag(it) {
 
 function noticeCard(it) {
   const n = it.data;
-  const dot = n.closedTypes ? 'close' : n.ratedTypes ? 'short' : 'none';
+  const [gk, gt] = pinKind(it);
   const tags = [];
   if (it.kind === 'un') tags.push('<span class="tag est">준공후 미분양 추정</span>');
   if (n.kind) tags.push(`<span class="tag">${esc(n.kind)}</span>`);
@@ -968,7 +1014,7 @@ function noticeCard(it) {
       <td class="${cls}">${res}</td></tr>`;
   }).join('');
   return `<div class="card" id="${it.id}">
-    <div class="hd"><span class="nm"><span class="dot ${dot}"></span>${esc(n.name)}</span>
+    <div class="hd"><span class="nm">${pinSvg(gk, gt, 15)} ${esc(n.name)}</span>
       ${distTag(it)}</div>
     <div class="meta">${esc(meta)}</div>
     <div class="meta">${esc(it.sgg)} · ${esc(n.addr || '')}</div>
@@ -991,7 +1037,8 @@ function djCard(it) {
   if (c.by) tags.push(`<span class="tag">${c.by}년</span>`);
   if (it.sub === 'cand') tags.push(`<span class="tag est">${esc(c.status || '분양권')}</span>`);
   return `<div class="card" id="${it.id}">
-    <div class="hd"><span class="nm"><span class="dot gold"></span>${esc(c.name)}</span>
+    <div class="hd"><span class="nm">${pinSvg('dj',
+      it.sub === 'cand' ? 'cand' : 'dj', 15)} ${esc(c.name)}</span>
       ${distTag(it)}</div>
     <div class="meta">${title} · ${esc(it.sgg)} ${esc(c.dong || '')}
       ${esc(c.road || c.jibun || '')}</div>
@@ -1016,15 +1063,36 @@ $('layers').addEventListener('click', (e) => {
 });
 
 function legend() {
+  const ic = (k, t) => pinSvg(k, t, 17);
   const p = [];
-  if (LAYER.cy) p.push(`<span><i style="background:var(--blue)"></i>마감 포함</span>
-    <span><i style="background:var(--warn)"></i>전 타입 미달</span>
-    <span><i style="background:#8b8f86"></i>결과 미공개</span>`);
-  if (LAYER.un) p.push('<span><i class="un"></i>준공후 미분양 추정</span>');
-  if (LAYER.dj) p.push('<span><i class="dj"></i>대장·최고가</span>');
-  p.push('<span style="color:var(--muted)">점을 누르면 오른쪽으로, 오른쪽 카드를 누르면 지도로 갑니다</span>');
+  if (LAYER.cy) p.push(`<span>${ic('cy','close')}마감 포함</span>
+    <span>${ic('cy','short')}전 타입 미달</span>
+    <span>${ic('cy','none')}결과 미공개</span>`);
+  if (LAYER.un) p.push(`<span>${ic('un','un')}준공후 미분양 추정</span>`);
+  if (LAYER.dj) p.push(`<span>${ic('dj','dj')}대장·최고가</span>
+    <span>${ic('dj','cand')}대장후보</span>`);
+  p.push('<span style="color:var(--muted)">핀을 누르면 정보로, 정보를 누르면 지도로 갑니다</span>');
   $('legend').innerHTML = p.join('');
 }
+
+/* ── 모바일: 지도 ↔ 정보 오가기 ────────────── */
+const jump = $('jump');
+function syncJump() {
+  const top = $('panel').getBoundingClientRect().top;
+  const down = top > window.innerHeight * .5;
+  jump.textContent = down ? '정보 보기 ↓' : '지도 보기 ↑';
+  jump.dataset.dir = down ? 'down' : 'up';
+}
+jump.addEventListener('click', () => {
+  const el = jump.dataset.dir === 'up' ? document.querySelector('.left') : $('panel');
+  const y = el.getBoundingClientRect().top + window.scrollY - 6;
+  window.scrollTo({top: Math.max(0, y), behavior: 'smooth'});
+  // 부드러운 이동이 끝난 뒤 글자를 한 번 더 맞춘다
+  setTimeout(syncJump, 600);
+});
+window.addEventListener('scroll', syncJump, {passive: true});
+window.addEventListener('resize', syncJump);
+syncJump();
 
 /* ── 시작 ───────────────────────────────── */
 (async function () {
