@@ -113,6 +113,12 @@ header .src{margin-left:auto;font-size:11.5px;color:var(--muted);
   text-shadow:0 0 3px var(--paper),0 0 3px var(--paper),0 0 3px var(--paper);
   pointer-events:none;transform:translate(-50%,-50%)}
 .plab.sm{font-size:11px;font-weight:500;color:var(--muted)}
+/* 스카이뷰에서는 종이색 글자가 묻힌다. 흰 글자에 검은 테를 둘러 띄운다. */
+#map.sky .plab{color:#fff;font-weight:700;
+  text-shadow:0 0 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.8),0 1px 2px #000}
+#map.sky .plab.sm{color:#e8e8e4;font-weight:600}
+#map.sky .pin .tag{background:rgba(18,20,17,.82);color:#f2f3ee;
+  border-color:rgba(255,255,255,.35)}
 
 /* ── 단지 표시: 물방울 핀 + 속기호 ─────────── */
 .pin{position:relative;width:28px;height:38px;cursor:pointer;
@@ -448,8 +454,12 @@ function fitTo(box) {
 }
 
 /* zIndex 를 못박는다. 시군구 위에 읍면동이 겹쳐 그려지는데,
-   순서를 운에 맡기면 안쪽을 눌러도 바깥 경계가 먼저 받는다. */
-const FILL = {
+   순서를 운에 맡기면 안쪽을 눌러도 바깥 경계가 먼저 받는다.
+
+   색은 지도 종류마다 따로 둔다. 일반지도에서 쓰던 어두운 녹회색 선은
+   위성사진 위에서 거의 보이지 않는다. 스카이뷰에서는 흰 선과 노란
+   선택선을 쓴다. */
+const FILL_ROAD = {
   sido: {zIndex: 1, strokeWeight: 2, strokeColor: '#5a6150', strokeOpacity: .85,
          fillColor: '#8a9280', fillOpacity: .10},
   sgg:  {zIndex: 2, strokeWeight: 2, strokeColor: '#4a5142', strokeOpacity: .8,
@@ -461,6 +471,20 @@ const FILL = {
   emdSel:{zIndex: 4, strokeWeight: 2.5, strokeColor: '#2c4a7c', strokeOpacity: .95,
          fillColor: '#2c4a7c', fillOpacity: .14},
 };
+const FILL_SKY = {
+  sido: {zIndex: 1, strokeWeight: 2.5, strokeColor: '#ffffff', strokeOpacity: .9,
+         fillColor: '#ffffff', fillOpacity: .06},
+  sgg:  {zIndex: 2, strokeWeight: 2.5, strokeColor: '#ffffff', strokeOpacity: .8,
+         fillColor: '#ffffff', fillOpacity: .04},
+  sel:  {zIndex: 2, strokeWeight: 4, strokeColor: '#ffd84d', strokeOpacity: .95,
+         fillColor: '#ffd84d', fillOpacity: .07},
+  emd:  {zIndex: 3, strokeWeight: 1.4, strokeColor: '#ffffff', strokeOpacity: .5,
+         fillColor: '#ffffff', fillOpacity: .01},
+  emdSel:{zIndex: 4, strokeWeight: 3, strokeColor: '#ffd84d', strokeOpacity: .95,
+         fillColor: '#ffd84d', fillOpacity: .16},
+};
+let SKY = true;                       // 스카이뷰로 시작한다
+const FILL = () => (SKY ? FILL_SKY : FILL_ROAD);
 
 function drawShape(rec, style, onClick, hover) {
   const made = [];
@@ -494,7 +518,7 @@ async function drawBoundaries() {
   const lv = MAP.getLevel();
   if (!view.sido || lv > LV_SGG) {
     for (const [name, rec] of Object.entries(SIDO)) {
-      drawShape(rec, FILL.sido, () => enterSido(name), true);
+      drawShape(rec, FILL().sido, () => enterSido(name), true);
       if (rec.label) putLabel(rec.label, name);
     }
     return;
@@ -503,19 +527,41 @@ async function drawBoundaries() {
   const many = Object.keys(sgg).length > 18;
   for (const [name, rec] of Object.entries(sgg)) {
     const on = name === view.sgg;
-    drawShape(rec, on ? FILL.sel : FILL.sgg, () => enterSgg(view.sido, name), !on);
+    drawShape(rec, on ? FILL().sel : FILL().sgg, () => enterSgg(view.sido, name), !on);
     if (rec.label) putLabel(rec.label, name, many);
   }
   if (view.sgg && lv <= LV_EMD) {
     try {
       const emd = (await emdGeo(view.sido))[view.sgg];
       if (emd) for (const [dn, rec] of Object.entries(emd)) {
-        drawShape(rec, dn === view.dong ? FILL.emdSel : FILL.emd,
+        drawShape(rec, dn === view.dong ? FILL().emdSel : FILL().emd,
           () => pickDong(dn), dn !== view.dong);
         if (rec.label) putLabel(rec.label, dn, true);
       }
     } catch (e) {}
   }
+}
+
+/* 스카이뷰에는 지명이 없다. HYBRID 겹침 층을 얹어야 도로·동네 이름이
+   같이 보인다. 일반지도로 돌아가면 다시 걷는다. */
+function setSky(on) {
+  SKY = on;
+  $('map').classList.toggle('sky', on);
+  try {
+    const H = kakao.maps.MapTypeId.HYBRID;
+    if (on) MAP.addOverlayMapTypeId(H);
+    else MAP.removeOverlayMapTypeId(H);
+  } catch (e) { /* 겹침 층을 못 쓰는 판본이면 그냥 넘어간다 */ }
+}
+
+/* 사용자가 지도/스카이뷰 단추를 누르면 경계 색을 바꿔 다시 그린다. */
+function onMapType() {
+  let road = false;
+  try { road = MAP.getMapTypeId() === kakao.maps.MapTypeId.ROADMAP; } catch (e) {}
+  if (road === !SKY) return;          // 바뀐 게 없다
+  setSky(!road);
+  drawBoundaries();
+  drawCircle();
 }
 
 /* ── 반경 원 ────────────────────────────── */
@@ -525,8 +571,10 @@ function drawCircle() {
   if (!RADIUS || !CENTER || !ready) return;
   circle = new kakao.maps.Circle({
     center: LL(CENTER.lat, CENTER.lng), radius: RADIUS * 1000,
-    strokeWeight: 2, strokeColor: '#2c4a7c', strokeOpacity: .8,
-    strokeStyle: 'shortdash', fillColor: '#2c4a7c', fillOpacity: .05, zIndex: 1});
+    strokeWeight: SKY ? 3 : 2, strokeColor: SKY ? '#ffd84d' : '#2c4a7c',
+    strokeOpacity: .9, strokeStyle: 'shortdash',
+    fillColor: SKY ? '#ffffff' : '#2c4a7c', fillOpacity: SKY ? .04 : .05,
+    zIndex: 1});
   circle.setMap(MAP);
   const el = document.createElement('div');
   el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#2c4a7c;' +
@@ -1152,11 +1200,18 @@ syncJump();
   legend(); renderNational();
   try {
     await loadSdk();
-    MAP = new kakao.maps.Map($('map'),
-      {center: LL(NAT_CENTER[0], NAT_CENTER[1]), level: NAT_LEVEL});
+    MAP = new kakao.maps.Map($('map'), {
+      center: LL(NAT_CENTER[0], NAT_CENTER[1]), level: NAT_LEVEL,
+      mapTypeId: kakao.maps.MapTypeId.SKYVIEW});
+    setSky(true);
+    try {
+      MAP.addControl(new kakao.maps.MapTypeControl(),
+        kakao.maps.ControlPosition.TOPRIGHT);
+    } catch (e) {}
     MAP.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
     ready = true;
     kakao.maps.event.addListener(MAP, 'idle', onIdle);
+    kakao.maps.event.addListener(MAP, 'maptypeid_changed', onMapType);
     // 지도를 누르면 그 자리를 기준점으로 삼는다 (반경 모드일 때)
     kakao.maps.event.addListener(MAP, 'click', (e) => {
       if (!RADIUS) return;
