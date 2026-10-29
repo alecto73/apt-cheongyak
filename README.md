@@ -39,6 +39,9 @@
 
 배포본: <https://alecto73.github.io/apt-cheongyak/>
 
+휴대폰에서 그 주소를 열고 '홈 화면에 추가'를 누르면 앱처럼 쓸 수 있습니다.
+주소창 없이 전체 화면으로 열리고, 아이콘은 지도 핀 모양입니다.
+
 손으로 띄울 때는 이렇게 합니다. 카카오맵은 등록된 도메인에서만 동작하므로
 `localhost` 도 카카오 개발자 사이트의 플랫폼 > Web 에 넣어 두세요.
 
@@ -91,7 +94,12 @@ python3 build_standalone.py
 python3 build_map.py        # 시군구 경계 재생성 (행정구역이 바뀔 때만)
 python3 build_emd.py        # 읍면동 경계 재생성 (build_map.py 뒤에)
 python3 build_latlng.py     # 경계를 위경도로 변환 (앞 둘 중 하나라도 돌렸으면)
+python3 build_icons.py      # 바로가기 아이콘 (모양을 바꿀 때만)
 ```
+
+아이콘은 `build_icons.py` 가 Pillow 로 직접 그립니다. 외부 그림 파일이
+없어서 색이나 모양을 바꾸려면 그 파일의 `BG`·`PIN`·`draw_icon()` 만
+고치고 다시 돌리면 됩니다.
 
 `etl.py` 한 번에 API 호출은 20회 미만입니다. 청약홈 API의 `perPage`
 상한이 커서 공고별로 경쟁률을 따로 부르지 않고 전체 테이블을 통째로
@@ -120,6 +128,7 @@ etl_daejang.py        실거래 수집 + 대장 판정 -> web/daejang/*.json
 lawd.py               실거래 지역코드 -> 앱 시군구 대응표
 daejang_seed.json     서울 미준공 대단지 조사값 (대장후보·세대수 보정)
 build_latlng.py       SVG 경계 -> 위경도 폴리곤 (web/geo/*)
+build_icons.py        바로가기 아이콘·매니페스트 (web/icon*, manifest)
 web/index.html        앱 본체 (카카오맵 SDK 외 의존성 없음)
 ```
 
