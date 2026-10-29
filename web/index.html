@@ -159,6 +159,10 @@ h3 svg{flex:0 0 auto;vertical-align:-3px}
 .card .dist{margin-left:auto;font-size:11.5px;color:var(--muted);
   font-variant-numeric:tabular-nums}
 .card .meta{color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.5}
+.card .rate{color:var(--ink);font-size:12px;margin-top:5px;
+  font-variant-numeric:tabular-nums}
+.card .rate b{font-weight:700;color:var(--blue)}
+.card .rate.off{color:var(--muted);font-style:normal}
 .card .big{font-size:16px;font-weight:650;color:var(--ochre);
   letter-spacing:-.02em}
 .card .hd svg{flex:0 0 auto;vertical-align:-3px;margin-right:2px}
@@ -887,6 +891,10 @@ function foot() {
     <b>준공후 미분양 단지는 추정입니다.</b> 전국 단지별 공식 자료가 없어,
     입주예정월이 지났고 청약에서 미달 타입이 있었으며 그 시·군·구의 준공후
     미분양이 0호가 아닌 공고를 골라낸 것입니다. 실제와 다를 수 있습니다.
+    경쟁률은 마감된 주택형에만 숫자가 붙습니다. 미달은 지원이 공급보다
+    적었다는 뜻이라 배수가 없고, 대신 접수 건수를 보여줍니다. 카드의
+    경쟁률은 주택형별 최저~최고 범위이며, 주택형을 펴면 어느 순위·지역에서
+    마감됐는지까지 나옵니다.
     자료 생성 ${M.generated}.</div>`;
 }
 
@@ -1004,25 +1012,51 @@ function noticeCard(it) {
   const meta = [n.noticeDate, n.totalHshld ? `${fmt(n.totalHshld)}세대` : null,
     n.moveIn ? `${n.moveIn.slice(0, 4)}.${n.moveIn.slice(4)} 입주` : null,
     n.avgPyeong ? `${fmt(n.avgPyeong)}만원/평` : null].filter(Boolean).join(' · ');
+
+  /* 청약 결과 요약. 접히기 전에도 경쟁률이 보여야 한다.
+     경쟁률 숫자는 마감된 타입에만 붙는다. 미달은 지원이 공급보다 적었다는
+     뜻이라 배수가 없어서, 그런 공고는 접수 건수로 보여준다.
+     평균은 내지 않는다. 청약홈이 쓰는 분모(해당 순위·지역 배정 물량)가
+     자료에 없어서 직접 계산하면 공표된 경쟁률과 어긋난다. 대신 주택형들의
+     최저~최고 범위를 그대로 보여준다. */
+  const rated = n.types.filter((t) => t.result === '마감' || t.result === '미달');
+  const rates = n.types.map((t) => t.rate).filter((x) => x);
+  const req = rated.reduce((a, t) => a + (t.req || 0), 0);
+  const bits = [];
+  if (rates.length) {
+    const lo = Math.min(...rates), hi = Math.max(...rates);
+    bits.push(`경쟁률 <b>${lo === hi ? hi : `${lo}~${hi}`}:1</b>`);
+  }
+  if (req) bits.push(`접수 ${fmt(req)}건`);
+  if (rated.length) bits.push(`마감 ${n.closedTypes}/${rated.length}타입`);
+  const summary = bits.length
+    ? `<div class="meta rate">${bits.join(' · ')}</div>`
+    : `<div class="meta rate off">청약 결과가 아직 공표되지 않았습니다</div>`;
+
   const rows = n.types.map((t) => {
     const cls = t.result === '마감' ? 'r-close' : t.result === '미달' ? 'r-short' : '';
-    const res = t.result === '마감' ? `마감 ${t.rate}:1`
-      : t.result === '미달' ? '미달' : '–';
+    const res = t.result === '마감'
+      ? `${esc(t.closedAt || '')} ${t.rate}:1`
+      : t.result === '미달' ? '미달' : '미공개';
     return `<tr><td>${esc(t.ty)}</td><td class="num">${t.area ?? '–'}</td>
+      <td class="num">${fmt(t.gnrl)}</td>
+      <td class="num">${t.result === '결과없음' ? '–' : fmt(t.req)}</td>
       <td class="num">${t.amount ? fmt(t.amount) : '–'}</td>
       <td class="num">${t.pyeong ? fmt(t.pyeong) : '–'}</td>
       <td class="${cls}">${res}</td></tr>`;
   }).join('');
+
   return `<div class="card" id="${it.id}">
     <div class="hd"><span class="nm">${pinSvg(gk, gt, 15)} ${esc(n.name)}</span>
       ${distTag(it)}</div>
     <div class="meta">${esc(meta)}</div>
     <div class="meta">${esc(it.sgg)} · ${esc(n.addr || '')}</div>
+    ${summary}
     <div class="tags">${tags.join('')}</div>
-    <details class="more"><summary>주택형 ${n.types.length}개</summary>
+    <details class="more"><summary>주택형별 경쟁률 ${n.types.length}개</summary>
       <div class="tw"><table><thead><tr><th>주택형</th><th>면적</th>
-        <th>분양가</th><th>평당</th><th>결과</th></tr></thead>
-        <tbody>${rows}</tbody></table></div>
+        <th>일반</th><th>접수</th><th>분양가</th><th>평당</th><th>청약 결과</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>
       <div class="lk">${n.url ? `<a href="${esc(n.url)}" target="_blank"
         rel="noopener">청약홈 공고</a>` : ''}</div>
     </details></div>`;
