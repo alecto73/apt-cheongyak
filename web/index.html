@@ -1290,10 +1290,10 @@ function djCard(it) {
     <div class="big num" style="margin-top:4px">${s.ppy ? fmt(s.ppy) : '–'}
       <span style="font-size:11.5px;font-weight:450;color:var(--muted)">만원/평</span>
       ${s.p84 ? `<span style="font-size:12px;font-weight:450;color:var(--muted)">
-        · 84㎡ ${fmt(s.p84)}만원</span>` : ''}</div>
+        · 전용84㎡ ${eok(s.p84)}</span>` : ''}</div>
     <div class="tags">${tags.join('')}</div>
-    ${s.last ? `<div class="meta">최근 ${s.last.d} · ${fmt(s.last.amt)}만원
-      · ${s.last.ar}㎡</div>` : ''}</div>`;
+    ${s.last ? `<div class="meta">최근 거래 ${s.last.d} · ${eok(s.last.amt)}
+      · 전용 ${s.last.ar}㎡</div>` : ''}</div>`;
 }
 
 /* ── 레이어 ─────────────────────────────── */
