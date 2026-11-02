@@ -323,7 +323,7 @@ function bigEnough(a) {
 function topItems(list, sido) {
   return list.filter(bigEnough).slice(0, TOPN).map((a, i) => ({
     id: `top-${a.sgg}-${a.dong}-${a.name}`, kind: 'top', rank: i + 1,
-    loc: a.loc, name: a.name, sido, sgg: a.sgg, data: a, dist: a.dist}));
+    loc: a.loc, name: a.name, sido, sgg: a.sgg, data: a}));
 }
 
 /* ── 거리 ───────────────────────────────── */
@@ -395,7 +395,8 @@ async function collect() {
       const [R, D, A] = await Promise.all([regionOf(sd), djOf(sd), aptOf(sd)]);
       for (const g of Object.keys(R))
         out.push(...itemsOf(sd, g, R[g], D[g]));
-      for (const a of A) if (a.loc) apts.push(Object.assign(a, {_sido: sd,
+      // 캐시된 원본을 건드리지 않게 복사본에 거리를 붙인다
+      for (const a of A) if (a.loc) apts.push(Object.assign({}, a, {_sido: sd,
         dist: dist(CENTER.lat, CENTER.lng, a.loc[0], a.loc[1])}));
     }
     const near = out.map((it) => Object.assign(it,
