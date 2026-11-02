@@ -179,6 +179,7 @@ h3 svg{flex:0 0 auto;vertical-align:-3px}
   font-variant-numeric:tabular-nums}
 .card .rate b{font-weight:700;color:var(--blue)}
 .card .rate.off{color:var(--muted);font-style:normal}
+.card .meta b.ppy{color:var(--ink);font-weight:700}
 .card .big{font-size:16px;font-weight:650;color:var(--ochre);
   letter-spacing:-.02em}
 .card .hd svg{flex:0 0 auto;vertical-align:-3px;margin-right:2px}
@@ -1196,7 +1197,10 @@ function noticeCard(it) {
   if (n.priceCap) tags.push('<span class="tag cap">상한제</span>');
   const meta = [n.noticeDate, n.totalHshld ? `${fmt(n.totalHshld)}세대` : null,
     n.moveIn ? `${n.moveIn.slice(0, 4)}.${n.moveIn.slice(4)} 입주` : null,
-    n.avgPyeong ? `${fmt(n.avgPyeong)}만원/평` : null].filter(Boolean).join(' · ');
+    n.avgPyeong ? `평당 ${fmt(n.avgPyeong)}만원` : null].filter(Boolean)
+    .map((x) => esc(x)).join(' · ')
+    // 평당 분양가는 굵게. 앞에서 이스케이프한 뒤에 태그를 씌운다.
+    .replace(/평당 ([\d,]+)만원/, '<b class="ppy">평당 $1만원</b>');
 
   /* 청약 결과 요약. 접히기 전에도 경쟁률이 보여야 한다.
      경쟁률 숫자는 마감된 타입에만 붙는다. 미달은 지원이 공급보다 적었다는
@@ -1234,7 +1238,7 @@ function noticeCard(it) {
   return `<div class="card" id="${it.id}">
     <div class="hd"><span class="nm">${pinSvg(gk, gt, 15)} ${esc(n.name)}</span>
       ${distTag(it)}</div>
-    <div class="meta">${esc(meta)}</div>
+    <div class="meta">${meta}</div>
     <div class="meta">${esc(it.sgg)} · ${esc(n.addr || '')}</div>
     ${summary}
     <div class="tags">${tags.join('')}</div>
