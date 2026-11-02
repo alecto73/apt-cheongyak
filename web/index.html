@@ -846,6 +846,12 @@ async function setRadius(km, center) {
     const hit = whichSido(CENTER.lat, CENTER.lng);
     if (hit) view = {sido: hit, sgg: null, dong: null};
     drawCircle();
+    // 화면 크기와 상관없이 원 전체가 들어오게 맞춘다 (좁은 화면에서 가장자리 핀이 잘린다)
+    if (circle && circle.getBounds) {
+      autoMoving = true;
+      try { MAP.setBounds(circle.getBounds()); } catch (e) {}
+      setTimeout(() => { autoMoving = false; }, 60);
+    }
     await drawBoundaries();
   }
   crumb();
