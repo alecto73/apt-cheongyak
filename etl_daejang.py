@@ -1041,8 +1041,105 @@ def main(argv=None, today=None, client=None):
         print(f"좌표 새로 조회 {n}건")
 
     write(regions, today, kapt, cli, trade_stop, silv_stop)
+    apt_cache = None
+    if "--no-geo" not in argv:
+        apt_cache = apt_geocode([c for c in cx if c["n"] >= APT_MIN_N])
+    write_apts(cx, apt_cache, hhs)
     print(f"API 호출 {cli.calls:,}회 · K-apt {kapt.calls:,}회"
           + (f" · K-apt 상태: {kapt.unavailable}" if kapt.unavailable else ""))
+
+
+# ------------------------------------------------------------------ 전체 단지 (반경 최고가용)
+APT_GEO_CACHE = os.path.join(ROOT, "apt-geo.json")
+APT_MIN_N = 2          # 거래 1건짜리는 이상치가 많아 뺀다
+MAX_APT_GEOCODE_OSM = int(os.environ.get("DAEJANG_APT_OSM", "1200"))
+
+
+def apt_geocode(cx):
+    """실거래가 있는 단지 전부의 좌표. 반경 안 최고가 단지를 찾는 데 쓴다.
+
+    카카오 REST 키가 있으면 여러 개를 동시에 물어 몇 분이면 끝난다.
+    없으면 Nominatim(초당 1회)으로 한 번에 MAX_APT_GEOCODE_OSM 건씩만 채우고,
+    시군구마다 비싼 단지부터 묻는다. 동 중심 같은 거친 위치는 쓰지 않는다
+    (반경 1km 조회에서 엉뚱한 단지가 잡힌다).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    cache = jload(APT_GEO_CACHE, {})
+    old = jload(GEO_CACHE, {})               # 대장용으로 이미 구한 좌표도 쓴다
+    kakao = os.environ.get("KAKAO_REST_KEY")
+    todo = []
+    for c in cx:
+        q = geo_query(c["sido"], c)
+        c["_gk"] = q["key"]
+        if q["key"] in cache:
+            continue
+        hit = old.get(q["key"])
+        if hit and len(hit) > 2 and hit[2] != "dong":
+            cache[q["key"]] = hit[:2]
+            continue
+        tries = [t for t in q["tries"] if t[0] != "dong"]
+        todo.append((q["key"], tries, -c["ppy"]))
+    # 비싼 단지부터 (OSM 예산이 모자랄 때 중요한 것부터 채우려고)
+    todo.sort(key=lambda t: t[2])
+
+    def one(item):
+        key, tries, _ = item
+        for kind, text in tries:
+            hit = kakao_lookup(kakao, text, kind) if kakao else osm_lookup(text)
+            if not kakao:
+                time.sleep(1.1)
+            if hit:
+                return key, hit
+        return key, None
+
+    if kakao:
+        batch = todo
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            for i, (k, v) in enumerate(ex.map(one, batch), 1):
+                cache[k] = v
+                if i % 2000 == 0:
+                    jdump(cache, APT_GEO_CACHE)
+                    print(f"  단지 좌표 {i:,}/{len(batch):,}", flush=True)
+    else:
+        batch = todo[:MAX_APT_GEOCODE_OSM]
+        for i, item in enumerate(batch, 1):
+            k, v = one(item)
+            cache[k] = v
+            if i % 100 == 0:
+                jdump(cache, APT_GEO_CACHE)
+                print(f"  단지 좌표(OSM) {i:,}/{len(batch):,}", flush=True)
+    jdump(cache, APT_GEO_CACHE)
+    got = sum(1 for c in cx if cache.get(c["_gk"]))
+    print(f"단지 좌표: 이번에 {len(batch):,}건 조회, 전체 {got:,}/{len(cx):,}개 확보"
+          + ("" if kakao else f" (카카오 키 없음, 남은 {len(todo) - len(batch):,}건은 다음 실행에)"),
+          flush=True)
+    return cache
+
+
+APT_COLS = ["name", "lat", "lng", "ppy", "p84", "by", "hh", "n", "sgg", "gu",
+            "dong", "road", "lastD", "lastAmt", "lastAr", "brand"]
+
+
+def write_apts(cx, cache, hhs):
+    """시도별 전체 단지 목록. 열 이름을 한 번만 적어 크기를 줄인다."""
+    out = collections.defaultdict(list)
+    for c in cx:
+        if c["n"] < APT_MIN_N:
+            continue
+        loc = cache.get(c.get("_gk")) if cache else None
+        h = hhs.memo.get(c["id"]) if hhs else None
+        out[c["sido"]].append([
+            c["name"], round(loc[0], 5) if loc else None, round(loc[1], 5) if loc else None,
+            c["ppy"], c["p84"], c["by"], (h or {}).get("hh"), c["n"],
+            c["sgg"], c["gu"], c["dong"], c["road"] or c["jibun"],
+            c["last"]["d"], c["last"]["amt"], c["last"]["ar"], c["brand"]])
+    d = os.path.join(WEB, "apt")
+    os.makedirs(d, exist_ok=True)
+    for sido, rows in out.items():
+        rows.sort(key=lambda r: -r[3])
+        jdump({"cols": APT_COLS, "rows": rows}, os.path.join(d, f"{SLUG[sido]}.json"))
+    print(f"web/apt: 시도 {len(out)}개, 단지 {sum(len(v) for v in out.values()):,}개 "
+          f"(좌표 {sum(1 for v in out.values() for r in v if r[1]):,}개)")
 
 
 def strip(o):

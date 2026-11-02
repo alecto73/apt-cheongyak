@@ -81,7 +81,7 @@ jobs:
           git config user.name  "github-actions"
           git config user.email "actions@github.com"
           git add web/index.json web/region web/geo-cache.json
-          for f in web/daejang web/daejang-geo.json kapt-cache.json; do
+          for f in web/daejang web/daejang-geo.json kapt-cache.json web/apt apt-geo.json; do
             [ -e "$f" ] && git add "$f"
           done
           git diff --staged --quiet && echo "변경 없음" && exit 0

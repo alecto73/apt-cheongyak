@@ -18,7 +18,7 @@
 :root{
   --paper:#eeefea; --card:#f7f7f4; --ink:#191c18; --rule:#d3d5cc;
   --muted:#6e7269; --blue:#2c4a7c; --ochre:#8a5a12; --warn:#8c3a2b;
-  --gold:#b8860b;
+  --gold:#b8860b; --teal:#1f6f6b;
   --pad:clamp(12px,1.6vw,22px);
 }
 *{box-sizing:border-box}
@@ -52,6 +52,7 @@ header .src{margin-left:auto;font-size:11.5px;color:var(--muted);
 .layers button[data-l="cy"].on .sw{background:var(--blue)}
 .layers button[data-l="un"].on .sw{background:#8c3a2b}
 .layers button[data-l="dj"].on .sw{background:var(--gold)}
+.layers button[data-l="top"].on .sw{background:var(--teal)}
 .layers button .n{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* ── 레이아웃: 지도를 크게, 정보는 좁게 ──────── */
@@ -210,6 +211,16 @@ td.r-short{color:var(--warn)}
 .rtable{width:100%;font-size:12px;margin-top:8px}
 .rtable tr{cursor:pointer}
 .rtable tr:hover td{background:var(--card)}
+.rank{display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;
+  font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.card .big.teal{color:var(--teal)}
+.tag.lead{border-color:rgba(184,134,11,.6);color:var(--gold);font-weight:600}
+.minf{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0 2px;font-size:12px;color:var(--muted);
+  align-items:center}
+.minf button{border:1px solid var(--rule);border-radius:999px;padding:1px 9px;
+  font-size:12px;background:var(--card);color:var(--muted)}
+.minf button.on{border-color:var(--teal);color:var(--teal);font-weight:600}
 </style>
 </head>
 <body>
@@ -219,6 +230,7 @@ td.r-short{color:var(--warn)}
     <button data-l="cy" class="on" aria-pressed="true"><i class="sw"></i>청약<span class="n" id="n-cy"></span></button>
     <button data-l="un" class="on" aria-pressed="true"><i class="sw"></i>준공후 미분양<span class="n" id="n-un"></span></button>
     <button data-l="dj" class="on" aria-pressed="true"><i class="sw"></i>대장<span class="n" id="n-dj"></span></button>
+    <button data-l="top" class="on" aria-pressed="true"><i class="sw"></i>시세 상위<span class="n" id="n-top"></span></button>
   </div>
   <div class="src" id="src"></div>
 </header>
@@ -233,7 +245,9 @@ td.r-short{color:var(--warn)}
       </div>
       <div class="rad" id="rad" role="group" aria-label="반경">
         <button data-r="0" class="on">지역</button>
+        <button data-r="0.5">500m</button>
         <button data-r="1">1km</button>
+        <button data-r="2">2km</button>
         <button data-r="3">3km</button>
         <button data-r="5">5km</button>
         <button data-r="10">10km</button>
@@ -253,10 +267,12 @@ td.r-short{color:var(--warn)}
 
 <script>
 const $ = (id) => document.getElementById(id);
-const cache = {sgg:{}, emd:{}, region:{}, dj:{}};
+const cache = {sgg:{}, emd:{}, region:{}, dj:{}, apt:{}};
 let IDX = null, DJI = null, SIDO = null;
 let view = {sido: null, sgg: null, dong: null};
-let LAYER = {cy: true, un: true, dj: true};
+let LAYER = {cy: true, un: true, dj: true, top: true};
+const TOPN = 10;                 // 시세 상위 몇 곳을 보여줄지
+let MINHH = 0;                   // 시세 상위의 최소 세대수 (0 이면 제한 없음)
 let MAP = null, ready = false;
 let RADIUS = 0;                  // km. 0 이면 행정구역 모드
 let CENTER = null;               // {lat, lng, label}
@@ -288,6 +304,27 @@ const emdGeo = (s) => cache.emd[s] || (cache.emd[s] = grab(`geo/emd/${SLUG[s]}.j
 const regionOf = (s) => cache.region[s] || (cache.region[s] = grab(`region/${SLUG[s]}.json`));
 const djOf = (s) => cache.dj[s] ||
   (cache.dj[s] = grab(`daejang/${SLUG[s]}.json`).catch(() => ({})));
+/* 실거래가 있는 단지 전부. 열 이름을 한 번만 적은 표라서 객체로 풀어 쓴다. */
+const aptOf = (s) => cache.apt[s] || (cache.apt[s] =
+  grab(`apt/${SLUG[s]}.json`).then((d) => d.rows.map((r) => {
+    const o = {};
+    d.cols.forEach((c, i) => { o[c] = r[i]; });
+    o.loc = o.lat != null ? [o.lat, o.lng] : null;
+    return o;
+  })).catch(() => []));
+
+/* 시세 상위 단지. 세대수를 아는 단지만 최소 세대수로 거르고,
+   모르는 단지는 거래가 1년에 10건 이상이면 대단지로 본다. */
+function bigEnough(a) {
+  if (!MINHH) return true;
+  if (a.hh) return a.hh >= MINHH;
+  return a.n >= (MINHH >= 1000 ? 20 : 10);
+}
+function topItems(list, sido) {
+  return list.filter(bigEnough).slice(0, TOPN).map((a, i) => ({
+    id: `top-${a.sgg}-${a.dong}-${a.name}`, kind: 'top', rank: i + 1,
+    loc: a.loc, name: a.name, sido, sgg: a.sgg, data: a, dist: a.dist}));
+}
 
 /* ── 거리 ───────────────────────────────── */
 function dist(aLat, aLng, bLat, bLng) {
@@ -297,6 +334,10 @@ function dist(aLat, aLng, bLat, bLng) {
     Math.cos(aLat * d) * Math.cos(bLat * d) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 }
+/* 만원 -> '23.5억' */
+const eok = (v) => v == null ? '–' : v >= 10000
+  ? `${(v / 10000).toFixed(v >= 1000000 ? 0 : 1).replace(/\.0$/, '')}억` : `${fmt(v)}만`;
+const radTxt = () => RADIUS < 1 ? `${RADIUS * 1000}m` : `${RADIUS}km`;
 const fmtDist = (km) => km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
 
 /* 반경 원이 걸치는 시도만 골라 받는다. 경계를 넘는 반경 조회의 핵심이다. */
@@ -349,34 +390,83 @@ function itemsOf(sido, sgg, R, D) {
 async function collect() {
   if (RADIUS && CENTER) {
     const names = sidosInRange(CENTER.lat, CENTER.lng, RADIUS);
-    const out = [];
+    const out = [], apts = [];
     for (const sd of names) {
-      const [R, D] = await Promise.all([regionOf(sd), djOf(sd)]);
+      const [R, D, A] = await Promise.all([regionOf(sd), djOf(sd), aptOf(sd)]);
       for (const g of Object.keys(R))
         out.push(...itemsOf(sd, g, R[g], D[g]));
+      for (const a of A) if (a.loc) apts.push(Object.assign(a, {_sido: sd,
+        dist: dist(CENTER.lat, CENTER.lng, a.loc[0], a.loc[1])}));
     }
-    return out.map((it) => Object.assign(it,
+    const near = out.map((it) => Object.assign(it,
         {dist: dist(CENTER.lat, CENTER.lng, it.loc[0], it.loc[1])}))
       .filter((it) => it.dist <= RADIUS)
       .sort((a, b) => a.dist - b.dist);
+    const inR = apts.filter((a) => a.dist <= RADIUS).sort((a, b) => b.ppy - a.ppy);
+    const top = inR.filter(bigEnough).slice(0, TOPN).map((a, i) => ({
+      id: `top-${a.sgg}-${a.dong}-${a.name}`, kind: 'top', rank: i + 1,
+      loc: a.loc, name: a.name, sido: a._sido, sgg: a.sgg, data: a, dist: a.dist}));
+    APTN = inR.length;
+    return mergeTop(top, near);
   }
   if (!view.sido) return [];
-  const [R, D] = await Promise.all([regionOf(view.sido), djOf(view.sido)]);
+  const [R, D, A] = await Promise.all([regionOf(view.sido), djOf(view.sido), aptOf(view.sido)]);
   const gus = view.sgg ? [view.sgg] : Object.keys(R);
   const out = [];
   for (const g of gus) if (R[g]) out.push(...itemsOf(view.sido, g, R[g], D[g]));
-  return out;
+  // 시세 상위는 시·군·구를 골랐을 때만 (시도 전체 상위 10곳은 한쪽에 몰린다)
+  if (!view.sgg) { APTN = 0; return out; }
+  let mine = A.filter((a) => a.sgg === view.sgg);
+  if (view.dong && curEmd && curEmd[view.dong]) {
+    const al = dongAliases(view.dong);
+    mine = mine.filter((a) => a.loc
+      ? inRings(curEmd[view.dong].rings, a.loc[0], a.loc[1]) : al.includes(a.dong));
+  }
+  APTN = mine.length;
+  return mergeTop(topItems(mine, view.sido), out);
 }
 
+
+let APTN = 0;                    // 지금 범위의 실거래 단지 수
+
+/* 대장 핀과 시세 상위 핀이 같은 단지를 가리키면 하나로 합친다.
+   순위 카드에 '대장' 표시를 붙이고 대장 핀은 지운다. */
+function mergeTop(top, rest) {
+  const key = (n) => String(n || '').replace(/\s|아파트/g, '');
+  const tops = new Map(top.map((t) => [t.sgg + '|' + key(t.name), t]));
+  const out = [];
+  for (const it of rest) {
+    const t = it.kind === 'dj' && it.sub !== 'cand' && tops.get(it.sgg + '|' + key(it.name));
+    if (t) { t.lead = it.sub; continue; }
+    out.push(it);
+  }
+  return top.concat(out);
+}
+
+/* 행정동 이름을 주소의 법정동 이름으로 (방배본동 -> 방배동, 송림3·5동 -> 송림동) */
+function dongAliases(name) {
+  const out = new Set([name]);
+  const tail = name.slice(-1), body = name.slice(0, -1);
+  out.add(body.replace(/[\d·]/g, '') + tail);
+  out.add(body.replace(/[\d·]/g, '').replace(/본$/, '') + tail);
+  for (const part of body.split('·')) {
+    const b = part.replace(/\d/g, '');
+    if (b) out.add(b + tail);
+  }
+  return [...out].filter((x) => x.length >= 2);
+}
 
 /* ── 핀 그림 ────────────────────────────── */
 /* 흔히 쓰는 물방울 모양 위치 핀에 속기호를 넣는다.
    청약은 아파트, 준공후 미분양은 우는 얼굴, 대장은 왕관. */
 const PIN_BODY = 'M14 1C7.4 1 2 6.4 2 13c0 9.2 12 24 12 24s12-14.8 12-24C26 6.4 20.6 1 14 1z';
 const COLOR = {close: '#2c4a7c', short: '#a8553a', none: '#7e837a',
-               un: '#8c3a2b', dj: '#b8860b', cand: '#c9a227'};
+               un: '#8c3a2b', dj: '#b8860b', cand: '#c9a227', top: '#1f6f6b'};
 
-function glyph(kind, c) {
+function glyph(kind, c, rank) {
+  if (kind === 'top')           // 순위 숫자
+    return `<text x="14" y="16.6" text-anchor="middle" font-size="${rank >= 10 ? 9.5 : 11}"
+      font-weight="800" fill="${c}" font-family="system-ui,sans-serif">${rank || ''}</text>`;
   if (kind === 'dj')            // 왕관
     return `<path d="M8.4 18.1 7.1 9.6l4.1 2.9L14 7.8l2.8 4.7 4.1-2.9-1.3 8.5z"
       fill="${c}" stroke="${c}" stroke-width=".7" stroke-linejoin="round"/>`;
@@ -395,17 +485,18 @@ function glyph(kind, c) {
     <rect x="15" y="15.4" width="1.9" height="1.9" fill="#fff"/>`;
 }
 
-function pinSvg(kind, tone, w) {
+function pinSvg(kind, tone, w, rank) {
   const c = COLOR[tone] || COLOR.close;
   const h = Math.round(w * 38 / 28);
   return `<svg viewBox="0 0 28 38" width="${w}" height="${h}" aria-hidden="true">
     <path d="${PIN_BODY}" fill="${c}" stroke="#fff" stroke-width="2.2"/>
     <circle cx="14" cy="13" r="8.1" fill="#fff"/>
-    ${glyph(kind, c)}</svg>`;
+    ${glyph(kind, c, rank)}</svg>`;
 }
 
 /* 단지 하나가 어떤 그림을 쓰는지 */
 function pinKind(it) {
+  if (it.kind === 'top') return ['top', 'top'];
   if (it.kind === 'un') return ['un', 'un'];
   if (it.kind === 'dj') return ['dj', it.sub === 'cand' ? 'cand' : 'dj'];
   const n = it.data;
@@ -439,7 +530,7 @@ function clearOverlays() {
 function clearPins() {
   pins.forEach((p) => p.ov.setMap(null));
   pins = [];
-  for (const k of ['cy', 'un', 'dj']) $('n-' + k).textContent = '';
+  for (const k of ['cy', 'un', 'dj', 'top']) $('n-' + k).textContent = '';
 }
 const LL = (a, b) => new kakao.maps.LatLng(a, b);
 function bounds(box) {
@@ -601,9 +692,9 @@ function drawCircle() {
 function drawPins() {
   if (!ready) { return; }
   clearPins();
-  const counts = {cy: 0, un: 0, dj: 0};
+  const counts = {cy: 0, un: 0, dj: 0, top: 0};
   for (const it of ITEMS) counts[it.kind]++;
-  const shown = ITEMS.filter((it) => LAYER[it.kind]);
+  const shown = ITEMS.filter((it) => LAYER[it.kind] && it.loc);
   // 몇 개 안 될 때만 이름표를 붙이고, 많으면 점도 줄인다.
   // 시도 전체를 볼 때 큰 점 수백 개가 서로 덮어버리기 때문이다.
   // 이름표는 몇 개 안 될 때만. 길면 잘라서 옆 핀을 덜 덮게 한다.
@@ -613,26 +704,29 @@ function drawPins() {
     const [k, tone] = pinKind(it);
     const el = document.createElement('div');
     el.className = 'pin' + (small ? ' sm' : '');
-    el.innerHTML = pinSvg(k, tone, small ? 20 : 28) +
+    el.innerHTML = pinSvg(k, tone, small ? 20 : 28, it.rank) +
       (withName ? `<div class="tag">${esc(it.name.length > 13
         ? it.name.slice(0, 12) + '…' : it.name)}</div>` : '');
     el.title = it.name + (it.dist != null ? ` · ${fmtDist(it.dist)}` : '');
     el.addEventListener('click', (e) => { e.stopPropagation(); select(it.id, false); });
     const ov = new kakao.maps.CustomOverlay({position: LL(it.loc[0], it.loc[1]),
-      content: el, yAnchor: 1, xAnchor: .5, zIndex: 10, clickable: true});
+      content: el, yAnchor: 1, xAnchor: .5,
+      zIndex: it.kind === 'top' ? 30 - it.rank : 10, clickable: true});
     ov.setMap(MAP);
     pins.push({ov, el, id: it.id});
   }
   $('n-cy').textContent = counts.cy ? ` ${counts.cy}` : '';
   $('n-un').textContent = counts.un ? ` ${counts.un}` : '';
   $('n-dj').textContent = counts.dj ? ` ${counts.dj}` : '';
+  $('n-top').textContent = counts.top ? ` ${counts.top}` : '';
   applySel();
   dimPins();
 }
 
 function dimPins() {
   const keep = view.dong && curEmd && curEmd[view.dong] ? new Set(
-    ITEMS.filter((it) => inRings(curEmd[view.dong].rings, it.loc[0], it.loc[1]))
+    ITEMS.filter((it) => it.kind === 'top' ||
+      (it.loc && inRings(curEmd[view.dong].rings, it.loc[0], it.loc[1])))
       .map((it) => it.id)) : null;
   pins.forEach((p) => p.el.classList.toggle('dim', !!keep && !keep.has(p.id)));
 }
@@ -662,7 +756,7 @@ function select(id, fromCard) {
   applySel();
   const it = ITEMS.find((x) => x.id === id);
   if (SEL && it) {
-    if (fromCard && ready) {
+    if (fromCard && ready && it.loc) {
       autoMoving = true;
       MAP.setCenter(LL(it.loc[0], it.loc[1]));
       if (MAP.getLevel() > 5) MAP.setLevel(5);
@@ -746,7 +840,7 @@ async function setRadius(km, center) {
     autoMoving = true;
     MAP.setCenter(LL(CENTER.lat, CENTER.lng));
     // 반경이 화면에 들어오게 배율을 맞춘다
-    MAP.setLevel(km <= 1 ? 5 : km <= 3 ? 6 : km <= 5 ? 7 : 8);
+    MAP.setLevel(km <= .5 ? 4 : km <= 1 ? 5 : km <= 2 ? 6 : km <= 3 ? 6 : km <= 5 ? 7 : 8);
     setTimeout(() => { autoMoving = false; }, 60);
     // 반경 안이 어느 시도인지 알아야 경계도 맞춰 그린다
     const hit = whichSido(CENTER.lat, CENTER.lng);
@@ -763,7 +857,7 @@ function crumb() {
   if (RADIUS && CENTER) {
     c.push('<button id="c-nat">전국</button>');
     c.push(`<b>${esc(CENTER.label || '기준점')}</b>`);
-    c.push(`<span>반경 ${RADIUS}km</span>`);
+    c.push(`<span>반경 ${radTxt()}</span>`);
   } else if (!view.sido) {
     c.push('<b>전국</b><span>지역을 누르거나 확대하세요</span>');
   } else {
@@ -924,12 +1018,25 @@ function bindCards() {
   });
   $('panel').querySelectorAll('tr[data-go]').forEach((tr) =>
     tr.onclick = () => select(tr.dataset.go, true));
+  $('panel').querySelectorAll('.minf button').forEach((b) =>
+    b.onclick = () => { MINHH = +b.dataset.hh; refresh(); });
   applySel();
 }
 
 function sections(items, ctx) {
   let h = '';
   const by = (k) => items.filter((x) => x.kind === k);
+  if (LAYER.top && ctx.top) {
+    const t = by('top');
+    h += `<h3>${pinSvg('top','top',15,1)}시세 상위<span>${
+      APTN ? `실거래 단지 ${fmt(APTN)}곳 중 평당가 순` : ''}</span></h3>`;
+    h += `<div class="minf">세대수 ${[[0, '전체'], [300, '300+'], [500, '500+'], [1000, '1,000+']]
+      .map(([v, l]) => `<button data-hh="${v}" class="${MINHH === v ? 'on' : ''}">${l}</button>`)
+      .join('')}</div>`;
+    h += t.length ? t.map(topCard).join('')
+      : `<p class="empty">${APTN ? '조건에 맞는 단지가 없습니다.'
+        : '이 범위에는 최근 12개월 매매 실거래가 2건 이상인 단지가 없습니다.'}</p>`;
+  }
   if (LAYER.un) {
     const u = by('un');
     h += `<h3>${pinSvg('un','un',15)}준공후 미분양<span>추정 ${u.length}곳</span></h3>`;
@@ -1022,7 +1129,8 @@ function renderSgg() {
   const {sido, sgg} = view;
   let items = ITEMS;
   if (view.dong && curEmd && curEmd[view.dong])
-    items = items.filter((it) => inRings(curEmd[view.dong].rings, it.loc[0], it.loc[1]));
+    items = items.filter((it) => it.kind === 'top' ||
+      (it.loc && inRings(curEmd[view.dong].rings, it.loc[0], it.loc[1])));
   const S = IDX.summary[`${sido}|${sgg}`] || {};
   const dj = (DJI && DJI.summary && DJI.summary[`${sido}|${sgg}`]) || null;
   const un = items.filter((x) => x.kind === 'un').length;
@@ -1035,7 +1143,7 @@ function renderSgg() {
       ['평균 분양가', S.pyeong ? fmt(S.pyeong) : '–', '만원/평', '', ''],
       ['평균 시세', dj && dj.avg ? fmt(dj.avg) : '–', '만원/평', '', ''],
     ]) +
-    sections(items, {afterNote: S.after
+    sections(items, {top: true, afterNote: S.after
       ? '이 시·군·구에 준공후 미분양이 집계되지만 최근 3년 공고 중 짚이는 단지가 없습니다.'
       : `${ym(IDX.meta.unsoldAfterBaseYm)} 기준 0호입니다.`}) + foot();
   bindCards();
@@ -1050,17 +1158,19 @@ function renderRadius() {
   const ppy = items.filter((x) => x.kind === 'cy' && x.data.avgPyeong)
     .map((x) => x.data.avgPyeong);
   const avg = ppy.length ? Math.round(ppy.reduce((a, b) => a + b, 0) / ppy.length) : null;
+  const t1 = items.find((x) => x.kind === 'top');
   $('panel').innerHTML = `<h2 class="place">${esc(CENTER.label || '기준점')}</h2>
-    <div class="place-sub">반경 ${RADIUS}km · ${
+    <div class="place-sub">반경 ${radTxt()} · ${
       gus.length ? esc(gus.slice(0, 3).join(', ')) +
         (gus.length > 3 ? ` 외 ${gus.length - 3}곳` : '') : '해당 지역 없음'}</div>` +
     figs([
-      ['청약 공고', fmt(cy), '건', '', '최근 3년'],
-      ['준공후 미분양', fmt(un), '곳', 'ochre', '추정'],
-      ['대장·최고가', fmt(dj), '곳', '', ''],
+      ['최고 평당가', t1 ? fmt(t1.data.ppy) : '–', '만원/평', 'ochre',
+        t1 ? esc(t1.name) : ''],
+      ['실거래 단지', fmt(APTN), '곳', '', '최근 12개월'],
+      ['청약 공고', fmt(cy), '건', '', `최근 3년 · 미분양 추정 ${un}곳`],
       ['평균 분양가', avg ? fmt(avg) : '–', '만원/평', '', '반경 안 공고 평균'],
     ]) +
-    sections(items, {afterNote: '이 반경 안에는 짚이는 단지가 없습니다.'}) + foot();
+    sections(items, {top: true, afterNote: '이 반경 안에는 짚이는 단지가 없습니다.'}) + foot();
   bindCards();
 }
 
@@ -1130,6 +1240,28 @@ function noticeCard(it) {
     </details></div>`;
 }
 
+function topCard(it) {
+  const a = it.data;
+  const tags = [];
+  if (it.lead) tags.push(`<span class="tag lead">${it.lead === 'leader' ? '대장' : '최고가'}</span>`);
+  if (a.brand) tags.push(`<span class="tag brand">${esc(a.brand)}</span>`);
+  if (a.hh) tags.push(`<span class="tag">${fmt(a.hh)}세대</span>`);
+  if (a.by) tags.push(`<span class="tag">${a.by}년</span>`);
+  tags.push(`<span class="tag">거래 ${a.n}건</span>`);
+  return `<div class="card" id="${it.id}">
+    <div class="hd"><span class="rank">${it.rank}</span>
+      <span class="nm">${esc(a.name)}</span>${distTag(it)}</div>
+    <div class="meta">${esc(a.gu || a.sgg)} ${esc(a.dong || '')} ${esc(a.road || '')}
+      ${a.loc ? '' : ' · 위치 미확인'}</div>
+    <div class="big teal num" style="margin-top:4px">${fmt(a.ppy)}
+      <span style="font-size:11.5px;font-weight:450;color:var(--muted)">만원/평</span>
+      ${a.p84 ? `<span style="font-size:12px;font-weight:450;color:var(--muted)">
+        · 전용84㎡ ${eok(a.p84)}</span>` : ''}</div>
+    <div class="tags">${tags.join('')}</div>
+    ${a.lastD ? `<div class="meta">최근 거래 ${a.lastD} · ${eok(a.lastAmt)} · 전용 ${a.lastAr}㎡</div>` : ''}
+  </div>`;
+}
+
 function djCard(it) {
   const c = it.data, s = c.silv || c;
   const title = it.sub === 'leader' ? '대장' : it.sub === 'cand' ? '대장후보' : '최고가';
@@ -1171,6 +1303,7 @@ function legend() {
     <span>${ic('cy','short')}전 타입 미달</span>
     <span>${ic('cy','none')}결과 미공개</span>`);
   if (LAYER.un) p.push(`<span>${ic('un','un')}준공후 미분양 추정</span>`);
+  if (LAYER.top) p.push(`<span>${pinSvg('top','top',17,1)}시세 상위 순위</span>`);
   if (LAYER.dj) p.push(`<span>${ic('dj','dj')}대장·최고가</span>
     <span>${ic('dj','cand')}대장후보</span>`);
   p.push('<span style="color:var(--muted)">핀을 누르면 정보로, 정보를 누르면 지도로 갑니다</span>');
