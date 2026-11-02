@@ -11,6 +11,11 @@ on:
   # 자료 갱신이 커밋을 밀어 넣을 때도, 손으로 올릴 때도 같이 배포된다.
   push:
     branches: [main]
+  # 자료 갱신은 GITHUB_TOKEN 으로 커밋하는데, 그 커밋은 다른 워크플로를
+  # 깨우지 않는다(GitHub 규칙). 그래서 갱신이 끝나면 따로 배포한다.
+  workflow_run:
+    workflows: ["자료 갱신"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
