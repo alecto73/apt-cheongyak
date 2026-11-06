@@ -222,6 +222,19 @@ td.r-short{color:var(--warn)}
 .minf button{border:1px solid var(--rule);border-radius:999px;padding:1px 9px;
   font-size:12px;background:var(--card);color:var(--muted)}
 .minf button.on{border-color:var(--teal);color:var(--teal);font-weight:600}
+
+/* ── 뒤로가기 확인창 ────────────────────── */
+.exitdlg{position:fixed;inset:0;z-index:500;display:flex;align-items:center;
+  justify-content:center;background:rgba(18,20,17,.45);padding:24px}
+.exitdlg[hidden]{display:none}
+.exitdlg .box{background:var(--paper);border-radius:8px;padding:20px 20px 14px;
+  width:100%;max-width:320px;box-shadow:0 10px 32px rgba(0,0,0,.3)}
+.exitdlg p{margin:0 0 16px;font-size:15px;font-weight:600}
+.exitdlg .btns{display:flex;gap:8px;justify-content:flex-end}
+.exitdlg button{padding:8px 16px;border-radius:5px;font-size:14px;
+  border:1px solid var(--rule);background:var(--card)}
+.exitdlg button.go{background:var(--ink);color:var(--paper);border-color:var(--ink);
+  font-weight:600}
 </style>
 </head>
 <body>
@@ -259,6 +272,12 @@ td.r-short{color:var(--warn)}
     <div class="legend" id="legend"></div>
   </div>
   <button class="jump" id="jump">정보 보기 ↓</button>
+  <div class="exitdlg" id="exitdlg" hidden role="dialog" aria-modal="true"
+    aria-labelledby="exitq">
+    <div class="box"><p id="exitq">앱을 종료할까요?</p>
+      <div class="btns"><button id="exit-no">취소</button>
+        <button id="exit-yes" class="go">종료</button></div></div>
+  </div>
   <div class="right" id="panel">
     <p class="empty">지도를 확대하거나 지역을 누르면 그 지역을 보여줍니다.
       위에서 주소를 찾거나 반경을 고르면 행정구역과 상관없이
@@ -1339,6 +1358,71 @@ jump.addEventListener('click', () => {
 window.addEventListener('scroll', syncJump, {passive: true});
 window.addEventListener('resize', syncJump);
 syncJump();
+
+/* ── 뒤로가기 ───────────────────────────── */
+/* 휴대폰 아래쪽 뒤로가기는 누르기 쉬워 실수로 앱을 나가는 일이 잦다.
+   방문 기록에 '지킴이' 칸을 하나 쌓아 두고, 뒤로가기가 그 칸을 지우면
+   열린 것을 하나 닫은 뒤 지킴이를 다시 쌓는다. 더 닫을 게 없으면
+   종료할지 묻는다. 열린 것은 바깥쪽부터 닫는다:
+   확인창 → 검색 결과 → 펼친 주택형 표 → 고른 단지 → (모바일) 아래 정보 칸 →
+   행정동 → 반경 → 시·군·구 → 시·도. */
+let exiting = false;
+const guard = () => history.pushState({app: 'guard'}, '');
+
+function closeOne() {
+  if (!$('exitdlg').hidden) { $('exitdlg').hidden = true; return true; }
+  if (!$('sres').hidden) { hideRes(); return true; }
+  const open = $('panel').querySelector('details[open]');
+  if (open) { open.open = false; return true; }
+  if (SEL) { SEL = null; applySel(); return true; }
+  if (window.matchMedia('(max-width:1000px)').matches &&
+      $('panel').getBoundingClientRect().top < window.innerHeight * .5) {
+    const y = document.querySelector('.left').getBoundingClientRect().top + window.scrollY - 6;
+    window.scrollTo({top: Math.max(0, y), behavior: 'smooth'});
+    setTimeout(syncJump, 600);
+    return true;
+  }
+  if (view.dong) { pickDong(view.dong); return true; }
+  if (RADIUS) { setRadius(0); return true; }
+  if (view.sgg) { enterSido(view.sido); return true; }
+  if (view.sido) { goNational(); return true; }
+  return false;
+}
+
+window.addEventListener('popstate', () => {
+  if (exiting) return;
+  if (closeOne()) { guard(); return; }
+  $('exitdlg').hidden = false;          // 지킴이는 확인 뒤에 다시 쌓는다
+  $('exit-no').focus();
+});
+$('exit-no').onclick = () => { $('exitdlg').hidden = true; guard(); };
+$('exit-yes').onclick = () => {
+  // 지킴이는 이미 빠졌으니 한 칸 더 뒤로 가면 앱(또는 이 페이지)을 떠난다.
+  exiting = true;
+  $('exitdlg').hidden = true;
+  history.back();
+  // 홈 화면 앱처럼 뒤로 갈 곳이 없으면 스크립트로는 닫을 수 없다.
+  // 그때는 지킴이를 다시 쌓지 않고, 휴대폰 뒤로가기로 닫도록 안내한다.
+  setTimeout(() => {
+    try { window.close(); } catch (e) {}
+    toast('뒤로가기를 한 번 더 누르면 종료됩니다');
+    setTimeout(() => { if (exiting) { exiting = false; guard(); } }, 3000);
+  }, 400);
+};
+function toast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;left:50%;bottom:76px;transform:translateX(-50%);' +
+    'z-index:600;background:rgba(25,28,24,.92);color:#fff;font-size:13.5px;' +
+    'padding:9px 16px;border-radius:999px;white-space:nowrap';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+$('exitdlg').addEventListener('click', (e) => {
+  if (e.target.id === 'exitdlg') { $('exitdlg').hidden = true; guard(); }
+});
+history.replaceState({app: 'root'}, '');
+guard();
 
 /* ── 시작 ───────────────────────────────── */
 (async function () {
